@@ -1,0 +1,10 @@
+{
+    "urls": [
+      ["mcp-micropython/__init__.py", "github:parnurzeal/mcp-micropython/src/__init__.py"],
+      ["mcp-micropython/utils.py", "github:parnurzeal/mcp-micropython/src/utils.py"]
+    ],
+    "deps": [
+      ["collections-defaultdict", "latest"]
+    ],
+    "version": "0.1"
+  }
