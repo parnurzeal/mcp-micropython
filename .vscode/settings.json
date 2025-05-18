@@ -1,15 +1,13 @@
 {
-    "python.languageServer": "Pylance",
-    "python.analysis.typeCheckingMode": "basic",
-    "python.analysis.diagnosticSeverityOverrides": {
-        "reportMissingModuleSource": "none"
-    },
-    "python.terminal.activateEnvironment": false,
-    "micropico.openOnStart": true,
-    "python.analysis.typeshedPaths": [
-        "~/.micropico-stubs/included"
-    ],
-    "python.analysis.extraPaths": [
-        "~/.micropico-stubs/included"
-    ]
+  "python.languageServer": "Pylance",
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingModuleSource": "none"
+  },
+  "python.linting.pylintEnabled": false,
+  "python.linting.enabled": true, // Ensure overall linting is on, Pylance will provide it
+  "python.terminal.activateEnvironment": false,
+  "micropico.openOnStart": true,
+  "python.analysis.typeshedPaths": ["~/.micropico-stubs/included"],
+  "python.analysis.extraPaths": ["~/.micropico-stubs/included"]
 }
