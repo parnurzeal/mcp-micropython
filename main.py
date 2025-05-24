@@ -1,4 +1,5 @@
 import uasyncio
+import sys  # Import sys for stderr
 from mcp.stdio_server import stdio_server  # Import the server function directly
 from mcp.registry import ToolRegistry  # Import the ToolRegistry
 
@@ -81,7 +82,12 @@ def setup_my_tools():
 
 
 async def main_server_loop():
-    print("Starting MCP MicroPython Stdio Server from main.py...")
+    # IMPORTANT: All print statements in this server application, especially those
+    # that are not part of the MCP JSON-RPC communication itself (e.g., debug logs,
+    # status messages), should be directed to sys.stderr.
+    # Printing to sys.stdout can interfere with the JSON-RPC messages expected by
+    # the client, as stdout is used for the primary communication channel.
+    print("Starting MCP MicroPython Stdio Server from main.py...", file=sys.stderr)
 
     # 1. Create and populate the tool registry
     my_registry = setup_my_tools()
@@ -89,13 +95,16 @@ async def main_server_loop():
     # 2. Pass the registry to the server
     await stdio_server(tool_registry=my_registry)
 
-    print("MCP MicroPython Stdio Server finished in main.py.")
+    print("MCP MicroPython Stdio Server finished in main.py.", file=sys.stderr)
 
 
 if __name__ == "__main__":
     try:
         uasyncio.run(main_server_loop())
     except KeyboardInterrupt:
-        print("Main application interrupted by user. Exiting.")
+        print("Main application interrupted by user. Exiting.", file=sys.stderr)
     except Exception as e:
-        print(f"An unexpected error occurred in main: {type(e).__name__}: {e}")
+        print(
+            f"An unexpected error occurred in main: {type(e).__name__}: {e}",
+            file=sys.stderr,
+        )

@@ -1,4 +1,5 @@
 # mcp/registry.py
+import sys
 
 
 class ToolError(Exception):
@@ -35,7 +36,7 @@ class ToolRegistry:
         """
         if name in self._tools:
             # Or raise an error, or log a warning
-            print(f"Warning: Tool '{name}' is being redefined.")
+            print(f"Warning: Tool '{name}' is being redefined.", file=sys.stderr)
 
         # If input_schema is an empty dict or None, store it as None,
         # signifying no parameters / inputSchema should be null.
@@ -50,7 +51,7 @@ class ToolRegistry:
             "handler": handler_func,
             "param_names": param_names,
         }
-        print(f"Tool '{name}' registered.")
+        print(f"Tool '{name}' registered.", file=sys.stderr)
 
     def get_tool_definition(self, name):
         # This method might not be directly used by the server if list_tool_definitions is comprehensive

@@ -31,6 +31,19 @@ These libraries are typically built into standard MicroPython firmware.
 
 This guide explains how to create your own MCP server with custom tools using this SDK. The primary file you'll modify or use as a template is `main.py`.
 
+### Important Note on Output Streams
+
+**Crucial for MCP Communication:** When developing your MicroPython MCP server, it is essential that all `print()` statements used for logging, debugging, or any other informational output are directed to `sys.stderr`. The standard output stream (`sys.stdout`) is exclusively used for the JSON-RPC 2.0 messages that form the communication channel with the MCP client.
+
+Any extraneous output (e.g., from `print("debug message")`) sent to `sys.stdout` will corrupt the JSON-RPC message stream, leading to parsing errors on the client side and a breakdown in communication.
+
+**How to do it:**
+
+1.  Import the `sys` module: `import sys`
+2.  Use the `file=sys.stderr` argument in your print statements: `print("Your debug message", file=sys.stderr)`
+
+This practice ensures that your server's diagnostic messages do not interfere with the protocol. The `mcp/stdio_server.py` and example `main.py` already follow this convention for their internal logging.
+
 ### 1. Define Tool Handler Functions
 
 Tool handlers are asynchronous Python functions that implement the logic for your tools.

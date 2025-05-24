@@ -1,4 +1,5 @@
 # MCP Package for MicroPython
+import sys
 
 # Import key components to make them available at the package level
 from .types import (
@@ -18,4 +19,4 @@ __all__ = [
     "process_mcp_message",
 ]
 
-print("MCP MicroPython SDK initialized")
+print("MCP MicroPython SDK initialized", file=sys.stderr)
