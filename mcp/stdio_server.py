@@ -12,9 +12,11 @@ async def handle_initialize(req_id, params, registry):
     # For now, using fixed values.
     # `params` from the client might include client capabilities, which we are ignoring here.
     capabilities_response = {
-        "serverName": "MicroPython MCP Server",
-        "serverVersion": "0.1.0",  # TODO: Make this configurable
-        "specificationVersion": "2025-03-26",  # Added specification version
+        "serverInfo": {
+            "name": "MicroPython MCP Server",
+            "version": "0.1.0",  # TODO: Make this configurable
+        },
+        "protocolVersion": "2025-03-26",
         "capabilities": {
             "tools": {
                 "listChanged": False
@@ -62,22 +64,26 @@ async def handle_tools_call(req_id, params, registry):  # Renamed to handle_tool
     try:
         # ToolRegistry.call_tool expects `params` as the arguments for the tool itself.
         result = await registry.call_tool(tool_name, tool_arguments)
-        # The result here is directly what the tool function returned.
-        # The MCP spec for tools/call response is `result: any`.
-        # For complex results (images, etc.), specific content types would be used.
-        # For MicroPython, direct JSON-serializable results are simplest.
-        return types.create_success_response(req_id, result)
+        # Wrap successful result according to CallToolResult schema
+        # Assuming simple text result for now.
+        call_tool_result = {
+            "content": [{"type": "text", "text": str(result)}],
+            "isError": False,  # Explicitly set isError
+            # structuredContent could be added here if tools provide it
+        }
+        return types.create_success_response(req_id, call_tool_result)
     except (
         ValueError
-    ) as ve:  # Errors from registry.call_tool (e.g. tool not found, bad params format)
+    ) as ve:  # Errors like tool not found or bad params for call_tool itself
         return types.create_error_response(req_id, -32602, "Invalid Params", str(ve))
-    except Exception as e:
-        # Catch other unexpected errors during tool execution
+    except Exception as e:  # This catches ToolError from registry.call_tool
+        # Report tool execution errors within a CallToolResult
         print(f"Error during execution of tool '{tool_name}': {e}", file=sys.stderr)
-        # Using a generic internal error code for tool execution failures
-        return types.create_error_response(
-            req_id, -32000, f"Tool Execution Error: {tool_name}", str(e)
-        )
+        error_call_tool_result = {
+            "content": [{"type": "text", "text": str(e)}],
+            "isError": True,
+        }
+        return types.create_success_response(req_id, error_call_tool_result)
 
 
 # Main message processing logic

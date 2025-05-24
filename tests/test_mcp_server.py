@@ -89,10 +89,16 @@ def test_tool_registry_list_definitions():
     }
 
     info_def = next(d for d in defs if d["name"] == "info")
-    assert info_def["inputSchema"] is None  # Expect null for empty properties
+    assert info_def["inputSchema"] == {
+        "type": "object",
+        "properties": {},
+    }  # Expect default empty schema
 
     info_null_def = next(d for d in defs if d["name"] == "info_null")
-    assert info_null_def["inputSchema"] is None  # Expect null for None properties
+    assert info_null_def["inputSchema"] == {
+        "type": "object",
+        "properties": {},
+    }  # Expect default empty schema
 
     print("test_tool_registry_list_definitions PASSED")
 
@@ -175,14 +181,15 @@ async def test_process_mcp_initialize():
     resp = await process_mcp_message(req, registry)
     assert resp["id"] == "init-1"
     assert "result" in resp
-    assert "serverName" in resp["result"]
-    assert resp["result"]["serverName"] == "MicroPython MCP Server"
+    assert "serverInfo" in resp["result"]
+    assert resp["result"]["serverInfo"]["name"] == "MicroPython MCP Server"
+    assert resp["result"]["serverInfo"]["version"] == "0.1.0"
     assert "capabilities" in resp["result"]
     assert "tools" in resp["result"]["capabilities"]
     assert resp["result"]["capabilities"]["tools"] == {"listChanged": False}
     assert (
-        resp["result"]["specificationVersion"] == "2025-03-26"
-    )  # Check for spec version
+        resp["result"]["protocolVersion"] == "2025-03-26"
+    )  # Check for protocol version
     print("test_process_mcp_initialize PASSED")
 
 
@@ -193,8 +200,11 @@ async def test_initialize_response_includes_spec_version():
     resp = await process_mcp_message(req, registry)
     assert resp["id"] == "init-spec-1"
     assert "result" in resp
-    assert "specificationVersion" in resp["result"]
-    assert resp["result"]["specificationVersion"] == "2025-03-26"
+    assert "serverInfo" in resp["result"]  # Check for serverInfo object
+    assert resp["result"]["serverInfo"]["name"] == "MicroPython MCP Server"
+    assert resp["result"]["serverInfo"]["version"] == "0.1.0"
+    assert "protocolVersion" in resp["result"]
+    assert resp["result"]["protocolVersion"] == "2025-03-26"
     print("test_initialize_response_includes_spec_version PASSED")
 
 
@@ -217,7 +227,10 @@ async def test_process_mcp_tools_list():
 
     info_tool_def = next(t for t in tools_list if t["name"] == "info")
     assert info_tool_def["description"] == "No params"
-    assert info_tool_def["inputSchema"] is None
+    assert info_tool_def["inputSchema"] == {
+        "type": "object",
+        "properties": {},
+    }  # Expect default empty schema
     print("test_process_mcp_tools_list PASSED")
 
 
@@ -231,7 +244,9 @@ async def test_process_mcp_tools_call_echo():
     }
     resp = await process_mcp_message(req, registry)
     assert resp["id"] == "call-echo-1"
-    assert resp.get("result") == "echo: micropython"
+    assert "result" in resp
+    assert resp["result"]["content"] == [{"type": "text", "text": "echo: micropython"}]
+    assert resp["result"]["isError"] is False
     print("test_process_mcp_tools_call_echo PASSED")
 
 
@@ -247,7 +262,9 @@ async def test_process_mcp_tools_call_add_dict_args():
     }
     resp = await process_mcp_message(req, registry)
     assert resp["id"] == "call-add-dict-1"
-    assert resp.get("result") == 30.0
+    assert "result" in resp
+    assert resp["result"]["content"] == [{"type": "text", "text": "30.0"}]
+    assert resp["result"]["isError"] is False
     print("test_process_mcp_tools_call_add_dict_args PASSED")
 
 
@@ -261,7 +278,9 @@ async def test_process_mcp_tools_call_add_list_args():
     }
     resp = await process_mcp_message(req, registry)
     assert resp["id"] == "call-add-list-1"
-    assert resp.get("result") == 40.0
+    assert "result" in resp
+    assert resp["result"]["content"] == [{"type": "text", "text": "40.0"}]
+    assert resp["result"]["isError"] is False
     print("test_process_mcp_tools_call_add_list_args PASSED")
 
 
@@ -278,7 +297,9 @@ async def test_process_mcp_tools_call_info_null_args():
     }
     resp = await process_mcp_message(req, registry)
     assert resp["id"] == "call-info-1"
-    assert resp.get("result") == "no_params_tool_ran"
+    assert "result" in resp
+    assert resp["result"]["content"] == [{"type": "text", "text": "no_params_tool_ran"}]
+    assert resp["result"]["isError"] is False
     print("test_process_mcp_tools_call_info_null_args PASSED")
 
 
@@ -314,9 +335,14 @@ async def test_process_mcp_tools_call_tool_handler_error():
     }
     resp = await process_mcp_message(req, registry)
     assert resp["id"] == "call-error-1"
-    assert "error" in resp
-    assert resp["error"]["code"] == -32000  # Tool Execution Error
-    assert "This tool intentionally errors" in resp["error"]["data"]
+    assert "result" in resp  # Should be a success response containing CallToolResult
+    assert resp["result"]["isError"] is True
+    assert len(resp["result"]["content"]) == 1
+    assert resp["result"]["content"][0]["type"] == "text"
+    assert (
+        "Error executing tool 'error_tool': This tool intentionally errors."
+        in resp["result"]["content"][0]["text"]
+    )
     print("test_process_mcp_tools_call_tool_handler_error PASSED")
 
 

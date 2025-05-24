@@ -82,7 +82,10 @@ class ToolRegistry:
                     # "required": [] # Could be added if register_tool collected this
                 }
             else:  # If properties_map is None (meaning no params for the tool)
-                final_input_schema = None  # Results in JSON null
+                final_input_schema = {
+                    "type": "object",
+                    "properties": {},
+                }  # Default empty schema
 
             tool_defs.append(
                 {
