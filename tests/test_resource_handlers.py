@@ -12,15 +12,19 @@ from mcp.stdio_server import process_mcp_message
 from tests.common_test_utils import (
     setup_common_resource_registry,
     ResourceError,
+    setup_test_registry,
+    setup_common_prompt_registry,
 )
 
 # --- Resource Handler Tests (via process_mcp_message) ---
 
 
 async def test_process_mcp_resources_list():
+    tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {"jsonrpc": "2.0", "method": "resources/list", "id": "res-list-1"}
-    resp = await process_mcp_message(req, None, res_reg)  # tool_registry is None
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
 
     assert resp["id"] == "res-list-1"
     assert "result" in resp
@@ -43,7 +47,9 @@ async def test_process_mcp_resources_list():
 
 
 async def test_process_mcp_resources_read_text_success():
+    tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     uri_to_test = "file:///example.txt"
     expected_content_text = "Common test content for file:///example.txt"
 
@@ -53,7 +59,7 @@ async def test_process_mcp_resources_read_text_success():
         "params": {"uri": uri_to_test},
         "id": "res-read-text-1",
     }
-    resp = await process_mcp_message(req, None, res_reg)  # tool_registry is None
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
 
     assert resp["id"] == "res-read-text-1"
     assert "result" in resp, f"Response was: {resp}"
@@ -67,7 +73,9 @@ async def test_process_mcp_resources_read_text_success():
 
 
 async def test_process_mcp_resources_read_binary_success():
+    tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     uri_to_test = "bytes:///test.bin"
     expected_blob_content = b"binary_data"
     import ubinascii
@@ -82,7 +90,7 @@ async def test_process_mcp_resources_read_binary_success():
         "params": {"uri": uri_to_test},
         "id": "res-read-bin-1",
     }
-    resp = await process_mcp_message(req, None, res_reg)  # tool_registry is None
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
 
     assert resp["id"] == "res-read-bin-1"
     assert "result" in resp, f"Response was: {resp}"
@@ -96,14 +104,16 @@ async def test_process_mcp_resources_read_binary_success():
 
 
 async def test_process_mcp_resources_read_missing_uri():
+    tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "resources/read",
         "params": {},
         "id": "res-read-err-1",
     }
-    resp = await process_mcp_message(req, None, res_reg)  # tool_registry is None
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "res-read-err-1"
     assert "error" in resp
     assert resp["error"]["code"] == -32602
@@ -112,14 +122,16 @@ async def test_process_mcp_resources_read_missing_uri():
 
 
 async def test_process_mcp_resources_read_unsupported_scheme_if_not_registered():
+    tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "resources/read",
         "params": {"uri": "http://example.com/unsupported.txt"},
         "id": "res-read-err-2",
     }
-    resp = await process_mcp_message(req, None, res_reg)  # tool_registry is None
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "res-read-err-2"
     assert "error" in resp
     assert resp["error"]["code"] == -32001
@@ -131,14 +143,16 @@ async def test_process_mcp_resources_read_unsupported_scheme_if_not_registered()
 
 
 async def test_process_mcp_resources_read_uri_not_found_in_registry():
+    tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "resources/read",
         "params": {"uri": "file:///non_existent_file_for_sure.txt"},
         "id": "res-read-err-3",
     }
-    resp = await process_mcp_message(req, None, res_reg)  # tool_registry is None
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "res-read-err-3"
     assert "error" in resp
     assert resp["error"]["code"] == -32001

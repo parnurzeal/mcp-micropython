@@ -11,6 +11,7 @@ from mcp.stdio_server import stdio_server
 from tests.common_test_utils import (
     setup_test_registry,
     setup_common_resource_registry,
+    setup_common_prompt_registry,
 )
 
 # --- stdio_server main loop Tests (for notifications and basic req/resp flow) ---
@@ -45,7 +46,8 @@ class MockStreamWriter:
 
 async def test_stdio_server_handles_notification():
     tool_reg = setup_test_registry()
-    res_reg = setup_common_resource_registry()  # Create resource registry
+    res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     notification_msg_str = ujson.dumps(
         {"jsonrpc": "2.0", "method": "some/notification", "params": {"data": "test"}}
     )
@@ -54,7 +56,8 @@ async def test_stdio_server_handles_notification():
 
     await stdio_server(
         tool_registry=tool_reg,
-        resource_registry=res_reg,  # Pass resource registry
+        resource_registry=res_reg,
+        prompt_registry=prompt_reg,
         custom_reader=reader,
         custom_writer=writer,
     )
@@ -68,7 +71,8 @@ async def test_stdio_server_handles_notification():
 
 async def test_stdio_server_sends_response_for_request():
     tool_reg = setup_test_registry()
-    res_reg = setup_common_resource_registry()  # Create resource registry
+    res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     request_msg_str = ujson.dumps(
         {"jsonrpc": "2.0", "method": "initialize", "id": "init-req-1"}
     )
@@ -77,7 +81,8 @@ async def test_stdio_server_sends_response_for_request():
 
     await stdio_server(
         tool_registry=tool_reg,
-        resource_registry=res_reg,  # Pass resource registry
+        resource_registry=res_reg,
+        prompt_registry=prompt_reg,
         custom_reader=reader,
         custom_writer=writer,
     )

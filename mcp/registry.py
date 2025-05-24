@@ -170,7 +170,7 @@ class ResourceError(Exception):
 
 class ResourceRegistry:
     def __init__(self):
-        self._resources = {}  # Stores resource definitions and read handlers
+        self._resources = {}
         # Example structure for self._resources[uri_str]:
         # {
         #     "definition": {"uri": "...", "name": "...", "description": "...", "mimeType": "..."},
@@ -233,3 +233,82 @@ class ResourceRegistry:
             if isinstance(e, ResourceError):
                 raise
             raise ResourceError(f"Error reading resource '{uri}': {str(e)}")
+
+
+class PromptError(Exception):
+    """Custom exception for prompt handling errors."""
+
+    pass
+
+
+class PromptRegistry:
+    def __init__(self):
+        self._prompts = {}
+        # Example structure for self._prompts[prompt_name]:
+        # {
+        #     "definition": {"name": "...", "description": "...", "arguments": [...]},
+        #     "get_handler": async_function_ref
+        #     # Handler takes (name: str, arguments: dict)
+        #     # and returns dict like {"messages": [...], "description": "..."}
+        # }
+
+    def register_prompt(
+        self, name: str, description: str, arguments_schema: list, get_handler: callable
+    ):
+        """
+        Registers a prompt template.
+        :param name: The unique name of the prompt.
+        :param description: A human-readable description.
+        :param arguments_schema: A list of argument definition objects
+                                 (e.g., [{"name": "topic", "description": "...", "required": True}]).
+                                 Can be None or empty list if no arguments.
+        :param get_handler: An async function that takes (name: str, arguments: dict)
+                            and returns a dict for GetPromptResult (messages, optional description).
+        """
+        if name in self._prompts:
+            print(f"Warning: Prompt '{name}' is being redefined.", file=sys.stderr)
+
+        self._prompts[name] = {
+            "definition": {
+                "name": name,
+                "description": description,
+                "arguments": arguments_schema if arguments_schema else [],
+            },
+            "get_handler": get_handler,
+        }
+        print(f"Prompt '{name}' registered.", file=sys.stderr)
+
+    def list_prompts(self):
+        """Returns a list of prompt definition objects."""
+        return [prompt_info["definition"] for prompt_info in self._prompts.values()]
+
+    async def get_prompt_result(self, name: str, arguments: dict = None):
+        """
+        Gets the resolved prompt messages and description using its handler.
+        :param name: The name of the prompt.
+        :param arguments: A dictionary of arguments for the prompt.
+        :return: A dictionary suitable for GetPromptResult (e.g., {"messages": [...], "description": "..."}).
+        :raises: PromptError if prompt not found or handler fails.
+        """
+        if arguments is None:
+            arguments = {}
+
+        if name not in self._prompts:
+            raise PromptError(f"Prompt '{name}' not found.")
+
+        prompt_info = self._prompts[name]
+        handler = prompt_info["get_handler"]
+
+        try:
+            # Handler is expected to be async and take name, arguments
+            result_dict = await handler(name, arguments)
+            # Ensure 'messages' key is present as per GetPromptResult schema
+            if "messages" not in result_dict:
+                raise PromptError(
+                    f"Prompt handler for '{name}' did not return 'messages'."
+                )
+            return result_dict
+        except Exception as e:
+            if isinstance(e, PromptError):
+                raise
+            raise PromptError(f"Error getting prompt '{name}': {str(e)}")

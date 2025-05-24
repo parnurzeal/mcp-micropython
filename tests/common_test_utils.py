@@ -80,3 +80,39 @@ def setup_common_resource_registry():
         read_handler=example_common_read_handler,
     )
     return res_registry
+
+
+# --- Common Prompt Registry Setup ---
+from mcp.registry import (
+    PromptRegistry,
+    PromptError,
+)  # Already imported PromptError if ResourceError was
+
+
+async def example_common_get_prompt_handler(name: str, arguments: dict):
+    if name == "common_example_prompt":
+        topic = arguments.get("topic", "default test topic")
+        messages = [
+            {
+                "role": "user",
+                "content": {
+                    "type": "text",
+                    "text": f"Common test prompt about {topic}",
+                },
+            }
+        ]
+        return {"description": f"Common test prompt: {topic}", "messages": messages}
+    raise PromptError(f"Common test prompt handler does not support prompt: {name}")
+
+
+def setup_common_prompt_registry():
+    prompt_reg = PromptRegistry()
+    prompt_reg.register_prompt(
+        name="common_example_prompt",
+        description="A common prompt for testing.",
+        arguments_schema=[
+            {"name": "topic", "description": "Test topic", "required": False}
+        ],
+        get_handler=example_common_get_prompt_handler,
+    )
+    return prompt_reg

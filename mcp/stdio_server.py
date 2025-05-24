@@ -2,11 +2,18 @@ import sys
 import uasyncio
 import ujson
 from . import types  # Assuming types.py is in the same mcp package
-from .registry import ResourceError, ToolError  # Import ResourceError and ToolError
+from .registry import (
+    ResourceError,
+    ToolError,
+    PromptRegistry,
+    PromptError,
+)  # Import PromptRegistry and PromptError
 
 
 # MCP Method Handlers
-async def handle_initialize(req_id, params, tool_registry, resource_registry):
+async def handle_initialize(
+    req_id, params, tool_registry, resource_registry, prompt_registry
+):  # Added prompt_registry
     capabilities = {
         "tools": (
             {"listChanged": False}
@@ -18,7 +25,11 @@ async def handle_initialize(req_id, params, tool_registry, resource_registry):
             if resource_registry and hasattr(resource_registry, "list_resources")
             else None
         ),
-        "prompts": {"listChanged": False},
+        "prompts": (
+            {"listChanged": False}
+            if prompt_registry and hasattr(prompt_registry, "list_prompts")
+            else None
+        ),
     }
     active_capabilities = {k: v for k, v in capabilities.items() if v is not None}
     capabilities_response = {
@@ -32,47 +43,62 @@ async def handle_initialize(req_id, params, tool_registry, resource_registry):
     return types.create_success_response(req_id, capabilities_response)
 
 
-async def handle_prompts_list(req_id, params, _):  # registry not used
-    sample_prompts = [
-        {
-            "name": "example_prompt",
-            "description": "An example prompt template.",
-            "arguments": [
-                {
-                    "name": "topic",
-                    "description": "The topic to discuss",
-                    "required": True,
-                }
-            ],
-        }
-    ]
-    return types.create_success_response(req_id, {"prompts": sample_prompts})
+async def handle_prompts_list(
+    req_id, params, prompt_registry
+):  # Changed _ to prompt_registry
+    if not prompt_registry:
+        return types.create_error_response(
+            req_id,
+            -32000,
+            "Server Configuration Error",
+            "Prompt registry not available.",
+        )
+    prompts = prompt_registry.list_prompts()
+    return types.create_success_response(req_id, {"prompts": prompts})
 
 
-async def handle_prompts_get(req_id, params, _):  # registry not used
+async def handle_prompts_get(
+    req_id, params, prompt_registry
+):  # Changed _ to prompt_registry
     prompt_name = params.get("name")
     prompt_arguments = params.get("arguments", {})
+
     if not prompt_name:
         return types.create_error_response(
             req_id, -32602, "Invalid Params", "Missing 'name' parameter for prompt."
         )
-    if prompt_name == "example_prompt":
-        topic = prompt_arguments.get("topic", "a default topic")
-        messages = [
-            {
-                "role": "user",
-                "content": {"type": "text", "text": f"Tell me about {topic}."},
-            }
-        ]
-        prompt_result = {"description": f"A prompt about {topic}", "messages": messages}
-        return types.create_success_response(req_id, prompt_result)
-    else:
+
+    if not prompt_registry:
         return types.create_error_response(
-            req_id, -32001, "Prompt Not Found", f"Prompt '{prompt_name}' not found."
+            req_id,
+            -32000,
+            "Server Configuration Error",
+            "Prompt registry not available.",
+        )
+
+    try:
+        prompt_result_dict = await prompt_registry.get_prompt_result(
+            prompt_name, prompt_arguments
+        )
+        return types.create_success_response(req_id, prompt_result_dict)
+    except PromptError as pe:
+        error_code = -32001 if "not found" in str(pe).lower() else -32000
+        return types.create_error_response(req_id, error_code, "Prompt Error", str(pe))
+    except Exception as e:
+        print(
+            f"Unexpected error during prompt get for '{prompt_name}': {e}",
+            file=sys.stderr,
+        )
+        return types.create_error_response(
+            req_id,
+            -32000,
+            "Internal Server Error",
+            f"Unexpected error getting prompt: {prompt_name}",
         )
 
 
 async def handle_resources_list(req_id, params, resource_registry):
+    # ... (existing implementation) ...
     if not resource_registry:
         return types.create_error_response(
             req_id,
@@ -85,6 +111,7 @@ async def handle_resources_list(req_id, params, resource_registry):
 
 
 async def handle_resources_read(req_id, params, resource_registry):
+    # ... (existing implementation) ...
     uri_to_read = params.get("uri")
     if not uri_to_read:
         return types.create_error_response(
@@ -99,7 +126,6 @@ async def handle_resources_read(req_id, params, resource_registry):
         )
     try:
         content = await resource_registry.read_resource_content(uri_to_read)
-
         resource_content_obj = {}
         if isinstance(content, str):
             resource_content_obj = {
@@ -116,14 +142,9 @@ async def handle_resources_read(req_id, params, resource_registry):
                 "blob": ubinascii.b2a_base64(content).decode("utf-8").strip(),
             }
         else:
-            print(
-                f"DEBUG stdio_server: Unexpected content type from handler: {type(content)}",
-                file=sys.stderr,
-            )
             raise ResourceError(
                 f"Resource handler for '{uri_to_read}' returned unexpected type: {type(content)}"
             )
-
         return types.create_success_response(
             req_id, {"contents": [resource_content_obj]}
         )
@@ -134,7 +155,7 @@ async def handle_resources_read(req_id, params, resource_registry):
         )
     except Exception as e:
         print(
-            f"Unexpected error during resource read for '{uri_to_read}': {e}",  # Keep general error print
+            f"Unexpected error during resource read for '{uri_to_read}': {e}",
             file=sys.stderr,
         )
         return types.create_error_response(
@@ -146,6 +167,7 @@ async def handle_resources_read(req_id, params, resource_registry):
 
 
 async def handle_tools_list(req_id, params, tool_registry):
+    # ... (existing implementation) ...
     if not tool_registry:
         return types.create_error_response(
             req_id, -32000, "Server Configuration Error", "Tool registry not available."
@@ -155,6 +177,7 @@ async def handle_tools_list(req_id, params, tool_registry):
 
 
 async def handle_tools_call(req_id, params, tool_registry):
+    # ... (existing implementation) ...
     if not tool_registry:
         return types.create_error_response(
             req_id, -32000, "Server Configuration Error", "Tool registry not available."
@@ -197,13 +220,17 @@ async def handle_tools_call(req_id, params, tool_registry):
 
 
 # Main message processing logic
-async def process_mcp_message(message_dict, tool_registry, resource_registry):
+async def process_mcp_message(
+    message_dict, tool_registry, resource_registry, prompt_registry
+):  # Added prompt_registry
     req_id = message_dict.get("id")
     method = message_dict.get("method")
     params = message_dict.get("params")
 
     if method == "initialize":
-        return await handle_initialize(req_id, params, tool_registry, resource_registry)
+        return await handle_initialize(
+            req_id, params, tool_registry, resource_registry, prompt_registry
+        )
     elif method == "tools/list":
         return await handle_tools_list(req_id, params, tool_registry)
     elif method == "tools/call":
@@ -213,9 +240,9 @@ async def process_mcp_message(message_dict, tool_registry, resource_registry):
     elif method == "resources/read":
         return await handle_resources_read(req_id, params, resource_registry)
     elif method == "prompts/list":
-        return await handle_prompts_list(req_id, params, None)
+        return await handle_prompts_list(req_id, params, prompt_registry)
     elif method == "prompts/get":
-        return await handle_prompts_get(req_id, params, None)
+        return await handle_prompts_get(req_id, params, prompt_registry)
     else:
         return types.create_error_response(
             req_id,
@@ -226,14 +253,25 @@ async def process_mcp_message(message_dict, tool_registry, resource_registry):
 
 
 async def stdio_server(
-    tool_registry, resource_registry, custom_reader=None, custom_writer=None
+    tool_registry,
+    resource_registry,
+    prompt_registry,  # Added prompt_registry
+    custom_reader=None,
+    custom_writer=None,
 ):
-    if not tool_registry or not resource_registry:
+    if (
+        not tool_registry or not resource_registry or not prompt_registry
+    ):  # Check all three
         print(
-            "Fatal Error: stdio_server requires ToolRegistry and ResourceRegistry instances.",
+            "Fatal Error: stdio_server requires ToolRegistry, ResourceRegistry, and PromptRegistry instances.",
             file=sys.stderr,
         )
         return
+
+    # ... (rest of stdio_server, ensuring process_mcp_message is called with all three registries) ...
+    # Inside the loop:
+    # await process_mcp_message(message_dict, tool_registry, resource_registry, prompt_registry)
+    # response_dict = await process_mcp_message(message_dict, tool_registry, resource_registry, prompt_registry)
 
     if custom_reader and custom_writer:
         reader = custom_reader
@@ -287,12 +325,18 @@ async def stdio_server(
                 else:
                     if is_notification:
                         await process_mcp_message(
-                            message_dict, tool_registry, resource_registry
+                            message_dict,
+                            tool_registry,
+                            resource_registry,
+                            prompt_registry,
                         )
                         response_dict = None
                     else:
                         response_dict = await process_mcp_message(
-                            message_dict, tool_registry, resource_registry
+                            message_dict,
+                            tool_registry,
+                            resource_registry,
+                            prompt_registry,
                         )
 
             if response_dict:

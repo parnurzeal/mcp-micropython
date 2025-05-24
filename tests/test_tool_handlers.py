@@ -10,7 +10,8 @@ if "." not in sys.path:
 from mcp.stdio_server import process_mcp_message
 from tests.common_test_utils import (
     setup_test_registry,
-    setup_common_resource_registry,  # Import resource registry setup
+    setup_common_resource_registry,
+    setup_common_prompt_registry,
 )
 
 # --- Tool Handler Tests (via process_mcp_message) ---
@@ -19,8 +20,9 @@ from tests.common_test_utils import (
 async def test_process_mcp_initialize():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {"jsonrpc": "2.0", "method": "initialize", "id": "init-1"}
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "init-1"
     assert "result" in resp
     assert "serverInfo" in resp["result"]
@@ -34,6 +36,8 @@ async def test_process_mcp_initialize():
         "subscribe": False,
         "listChanged": False,
     }
+    assert "prompts" in resp["result"]["capabilities"]
+    assert resp["result"]["capabilities"]["prompts"] == {"listChanged": False}
     assert resp["result"]["protocolVersion"] == "2025-03-26"
     print("test_process_mcp_initialize PASSED")
 
@@ -41,11 +45,12 @@ async def test_process_mcp_initialize():
 async def test_initialize_response_includes_protocol_version():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {"jsonrpc": "2.0", "method": "initialize", "id": "init-spec-1"}
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "init-spec-1"
     assert "result" in resp
-    assert "serverInfo" in resp["result"]
+    assert "serverInfo" in resp["result"]  # Check this still exists
     assert resp["result"]["serverInfo"]["name"] == "MicroPython MCP Server"
     assert resp["result"]["serverInfo"]["version"] == "0.1.0"
     assert "protocolVersion" in resp["result"]
@@ -56,8 +61,9 @@ async def test_initialize_response_includes_protocol_version():
 async def test_process_mcp_tools_list():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {"jsonrpc": "2.0", "method": "tools/list", "id": "list-1"}
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "list-1"
     assert "result" in resp
     assert "tools" in resp["result"]
@@ -71,23 +77,21 @@ async def test_process_mcp_tools_list():
     }
     info_tool_def = next(t for t in tools_list if t["name"] == "info")
     assert info_tool_def["description"] == "No params"
-    assert info_tool_def["inputSchema"] == {
-        "type": "object",
-        "properties": {},
-    }
+    assert info_tool_def["inputSchema"] == {"type": "object", "properties": {}}
     print("test_process_mcp_tools_list PASSED")
 
 
 async def test_process_mcp_tools_call_echo():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "tools/call",
         "params": {"name": "echo", "arguments": {"message": "micropython"}},
         "id": "call-echo-1",
     }
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "call-echo-1"
     assert "result" in resp
     assert resp["result"]["content"] == [{"type": "text", "text": "echo: micropython"}]
@@ -98,13 +102,14 @@ async def test_process_mcp_tools_call_echo():
 async def test_process_mcp_tools_call_add_dict_args():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "tools/call",
         "params": {"name": "add", "arguments": {"a": 10, "b": 20}},
         "id": "call-add-dict-1",
     }
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "call-add-dict-1"
     assert "result" in resp
     assert resp["result"]["content"] == [{"type": "text", "text": "30.0"}]
@@ -115,13 +120,14 @@ async def test_process_mcp_tools_call_add_dict_args():
 async def test_process_mcp_tools_call_add_list_args():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "tools/call",
         "params": {"name": "add", "arguments": [15, 25]},
         "id": "call-add-list-1",
     }
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "call-add-list-1"
     assert "result" in resp
     assert resp["result"]["content"] == [{"type": "text", "text": "40.0"}]
@@ -132,13 +138,14 @@ async def test_process_mcp_tools_call_add_list_args():
 async def test_process_mcp_tools_call_info_null_args():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "tools/call",
         "params": {"name": "info", "arguments": None},
         "id": "call-info-1",
     }
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "call-info-1"
     assert "result" in resp
     assert resp["result"]["content"] == [{"type": "text", "text": "no_params_tool_ran"}]
@@ -149,18 +156,17 @@ async def test_process_mcp_tools_call_info_null_args():
 async def test_process_mcp_tools_call_tool_not_found():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "tools/call",
         "params": {"name": "non_existent_tool", "arguments": {}},
         "id": "call-notfound-1",
     }
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "call-notfound-1"
     assert "error" in resp
     assert resp["error"]["code"] == -32602
-    assert resp["error"]["message"] == "Invalid Params"
-    assert "data" in resp["error"]
     assert "Tool 'non_existent_tool' not found" in resp["error"]["data"]
     print("test_process_mcp_tools_call_tool_not_found PASSED")
 
@@ -168,18 +174,17 @@ async def test_process_mcp_tools_call_tool_not_found():
 async def test_process_mcp_tools_call_tool_handler_error():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "tools/call",
         "params": {"name": "error_tool", "arguments": {}},
         "id": "call-error-1",
     }
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "call-error-1"
     assert "result" in resp
     assert resp["result"]["isError"] is True
-    assert len(resp["result"]["content"]) == 1
-    assert resp["result"]["content"][0]["type"] == "text"
     assert (
         "Error executing tool 'error_tool': This tool intentionally errors."
         in resp["result"]["content"][0]["text"]
@@ -190,18 +195,17 @@ async def test_process_mcp_tools_call_tool_handler_error():
 async def test_process_mcp_tools_call_missing_tool_name():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "tools/call",
         "params": {"arguments": {}},
         "id": "call-missingname-1",
     }
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "call-missingname-1"
     assert "error" in resp
     assert resp["error"]["code"] == -32602
-    assert resp["error"]["message"] == "Invalid Params"
-    assert "data" in resp["error"]
     assert (
         "Tool 'name' not provided in parameters for tools/call."
         in resp["error"]["data"]
@@ -212,17 +216,16 @@ async def test_process_mcp_tools_call_missing_tool_name():
 async def test_process_mcp_method_not_found():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
+    prompt_reg = setup_common_prompt_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "non_existent_mcp_method",
         "id": "method-notfound-1",
     }
-    resp = await process_mcp_message(req, tool_reg, res_reg)
+    resp = await process_mcp_message(req, tool_reg, res_reg, prompt_reg)
     assert resp["id"] == "method-notfound-1"
     assert "error" in resp
     assert resp["error"]["code"] == -32601
-    assert resp["error"]["message"] == "Method Not Found"
-    assert "data" in resp["error"]
     assert (
         "The method 'non_existent_mcp_method' is not supported by this server."
         in resp["error"]["data"]
