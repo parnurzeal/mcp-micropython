@@ -160,3 +160,76 @@ class ToolRegistry:
 
 # Global default registry (optional, or server can instantiate its own)
 # default_registry = ToolRegistry()
+
+
+class ResourceError(Exception):
+    """Custom exception for resource handling errors."""
+
+    pass
+
+
+class ResourceRegistry:
+    def __init__(self):
+        self._resources = {}  # Stores resource definitions and read handlers
+        # Example structure for self._resources[uri_str]:
+        # {
+        #     "definition": {"uri": "...", "name": "...", "description": "...", "mimeType": "..."},
+        #     "read_handler": async_function_ref # Takes URI, returns content (str/bytes)
+        # }
+
+    def register_resource(
+        self,
+        uri: str,
+        name: str,
+        read_handler: callable,
+        description: str = None,
+        mime_type: str = "text/plain",
+    ):
+        """
+        Registers a resource.
+        :param uri: The unique URI of the resource (e.g., "file:///example.txt").
+        :param name: A human-readable name for the resource.
+        :param read_handler: An async function that takes the URI (str) and returns its content (str or bytes).
+        :param description: Optional description of the resource.
+        :param mime_type: Optional MIME type of the resource.
+        """
+        if uri in self._resources:
+            print(f"Warning: Resource URI '{uri}' is being redefined.", file=sys.stderr)
+
+        self._resources[uri] = {
+            "definition": {
+                "uri": uri,
+                "name": name,
+                "description": description,
+                "mimeType": mime_type,
+            },
+            "read_handler": read_handler,
+        }
+        print(f"Resource '{name}' with URI '{uri}' registered.", file=sys.stderr)
+
+    def list_resources(self):
+        """Returns a list of resource definition objects."""
+        return [res_info["definition"] for res_info in self._resources.values()]
+
+    async def read_resource_content(self, uri: str):
+        """
+        Reads the content of a registered resource using its handler.
+        :param uri: The URI of the resource to read.
+        :return: The content of the resource (str or bytes).
+        :raises: ResourceError if resource not found or handler fails.
+        """
+        if uri not in self._resources:
+            raise ResourceError(f"Resource with URI '{uri}' not found.")
+
+        resource_info = self._resources[uri]
+        handler = resource_info["read_handler"]
+
+        try:
+            # The handler is expected to be an async function that takes the URI
+            content = await handler(uri)
+            return content
+        except Exception as e:
+            # Wrap errors from the handler in ResourceError
+            if isinstance(e, ResourceError):
+                raise
+            raise ResourceError(f"Error reading resource '{uri}': {str(e)}")

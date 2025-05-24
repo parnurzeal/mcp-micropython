@@ -6,7 +6,11 @@ import sys
 if "." not in sys.path:
     sys.path.insert(0, ".")
 
-from mcp.registry import ToolRegistry
+from mcp.registry import (
+    ToolRegistry,
+    ResourceRegistry,
+    ResourceError,
+)  # Moved ResourceRegistry and ResourceError import here
 
 
 # --- Mock Tool Handlers ---
@@ -42,3 +46,37 @@ def setup_test_registry():
     registry.register_tool("info", "No params", None, mock_no_params_tool)
     registry.register_tool("error_tool", "Errors", {}, mock_error_tool)
     return registry
+
+
+# --- Common Resource Registry Setup ---
+# (This is minimal for now as resource handlers are simple in stdio_server.py)
+# If main.py registers specific resource handlers, this might need to mirror that.
+# ResourceRegistry and ResourceError are already imported at the top.
+
+
+async def example_common_read_handler(uri: str):
+    # A generic handler for tests, can be more specific if needed
+    if uri == "file:///example.txt":
+        return "Common test content for file:///example.txt"
+    elif uri == "bytes:///test.bin":
+        return b"binary_data"
+    raise ResourceError(f"Common test handler does not support URI: {uri}")
+
+
+def setup_common_resource_registry():
+    res_registry = ResourceRegistry()
+    res_registry.register_resource(
+        uri="file:///example.txt",
+        name="Common Test Example File",
+        description="A common resource for testing.",
+        mime_type="text/plain",
+        read_handler=example_common_read_handler,
+    )
+    res_registry.register_resource(
+        uri="bytes:///test.bin",
+        name="Common Test Binary File",
+        description="A common binary resource for testing.",
+        mime_type="application/octet-stream",
+        read_handler=example_common_read_handler,
+    )
+    return res_registry

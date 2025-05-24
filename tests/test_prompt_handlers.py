@@ -8,17 +8,17 @@ if "." not in sys.path:
     sys.path.insert(0, ".")
 
 from mcp.stdio_server import process_mcp_message
-from tests.common_test_utils import (
-    setup_test_registry,
-)  # For consistency, though not used by prompt handlers yet
+
+# No specific registry setup needed from common_test_utils for current prompt tests,
+# as prompt handlers don't use registries yet. We'll pass None for registries.
 
 # --- Prompt Handler Tests (via process_mcp_message) ---
 
 
 async def test_process_mcp_prompts_list():
-    registry = setup_test_registry()  # registry is not used by current prompt handlers
     req = {"jsonrpc": "2.0", "method": "prompts/list", "id": "p-list-1"}
-    resp = await process_mcp_message(req, registry)
+    # process_mcp_message expects (message_dict, tool_registry, resource_registry)
+    resp = await process_mcp_message(req, None, None)
 
     assert resp["id"] == "p-list-1"
     assert "result" in resp
@@ -33,14 +33,13 @@ async def test_process_mcp_prompts_list():
 
 
 async def test_process_mcp_prompts_get_success():
-    registry = setup_test_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "prompts/get",
         "params": {"name": "example_prompt", "arguments": {"topic": "MicroPython"}},
         "id": "p-get-1",
     }
-    resp = await process_mcp_message(req, registry)
+    resp = await process_mcp_message(req, None, None)
 
     assert resp["id"] == "p-get-1"
     assert "result" in resp
@@ -55,14 +54,13 @@ async def test_process_mcp_prompts_get_success():
 
 
 async def test_process_mcp_prompts_get_default_topic():
-    registry = setup_test_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "prompts/get",
         "params": {"name": "example_prompt"},  # No arguments provided
         "id": "p-get-2",
     }
-    resp = await process_mcp_message(req, registry)
+    resp = await process_mcp_message(req, None, None)
 
     assert resp["id"] == "p-get-2"
     assert "result" in resp
@@ -75,14 +73,13 @@ async def test_process_mcp_prompts_get_default_topic():
 
 
 async def test_process_mcp_prompts_get_not_found():
-    registry = setup_test_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "prompts/get",
         "params": {"name": "non_existent_prompt"},
         "id": "p-get-err-1",
     }
-    resp = await process_mcp_message(req, registry)
+    resp = await process_mcp_message(req, None, None)
 
     assert resp["id"] == "p-get-err-1"
     assert "error" in resp
@@ -92,14 +89,13 @@ async def test_process_mcp_prompts_get_not_found():
 
 
 async def test_process_mcp_prompts_get_missing_name():
-    registry = setup_test_registry()
     req = {
         "jsonrpc": "2.0",
         "method": "prompts/get",
         "params": {},  # Missing name
         "id": "p-get-err-2",
     }
-    resp = await process_mcp_message(req, registry)
+    resp = await process_mcp_message(req, None, None)
     assert resp["id"] == "p-get-err-2"
     assert "error" in resp
     assert resp["error"]["code"] == -32602  # Invalid Params

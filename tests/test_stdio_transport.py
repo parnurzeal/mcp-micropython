@@ -8,7 +8,10 @@ if "." not in sys.path:
     sys.path.insert(0, ".")
 
 from mcp.stdio_server import stdio_server
-from tests.common_test_utils import setup_test_registry
+from tests.common_test_utils import (
+    setup_test_registry,
+    setup_common_resource_registry,
+)
 
 # --- stdio_server main loop Tests (for notifications and basic req/resp flow) ---
 
@@ -41,15 +44,19 @@ class MockStreamWriter:
 
 
 async def test_stdio_server_handles_notification():
-    registry = setup_test_registry()
+    tool_reg = setup_test_registry()
+    res_reg = setup_common_resource_registry()  # Create resource registry
     notification_msg_str = ujson.dumps(
         {"jsonrpc": "2.0", "method": "some/notification", "params": {"data": "test"}}
     )
-    reader = MockStreamReader([notification_msg_str, ""])  # EOF after one message
+    reader = MockStreamReader([notification_msg_str, ""])
     writer = MockStreamWriter()
 
     await stdio_server(
-        tool_registry=registry, custom_reader=reader, custom_writer=writer
+        tool_registry=tool_reg,
+        resource_registry=res_reg,  # Pass resource registry
+        custom_reader=reader,
+        custom_writer=writer,
     )
 
     written_output = writer.get_written_str()
@@ -60,7 +67,8 @@ async def test_stdio_server_handles_notification():
 
 
 async def test_stdio_server_sends_response_for_request():
-    registry = setup_test_registry()
+    tool_reg = setup_test_registry()
+    res_reg = setup_common_resource_registry()  # Create resource registry
     request_msg_str = ujson.dumps(
         {"jsonrpc": "2.0", "method": "initialize", "id": "init-req-1"}
     )
@@ -68,7 +76,10 @@ async def test_stdio_server_sends_response_for_request():
     writer = MockStreamWriter()
 
     await stdio_server(
-        tool_registry=registry, custom_reader=reader, custom_writer=writer
+        tool_registry=tool_reg,
+        resource_registry=res_reg,  # Pass resource registry
+        custom_reader=reader,
+        custom_writer=writer,
     )
 
     written_output = writer.get_written_str().strip()
