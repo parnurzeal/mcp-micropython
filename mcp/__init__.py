@@ -8,7 +8,7 @@ from .types import (
     create_error_response,
     create_success_response,
 )
-from .stdio_server import stdio_server, process_mcp_message
+from .stdio_server import stdio_server  # Removed process_mcp_message
 
 __all__ = [
     "JSONRPCMessage",
@@ -16,7 +16,7 @@ __all__ = [
     "create_error_response",
     "create_success_response",
     "stdio_server",
-    "process_mcp_message",
+    # "process_mcp_message", # Removed from __all__
 ]
 
 print("MCP MicroPython SDK initialized", file=sys.stderr)

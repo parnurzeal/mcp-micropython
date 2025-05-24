@@ -42,15 +42,35 @@ async def main_test_suite():
     await tests.test_stdio_transport.run_stdio_transport_tests()
     print("=======================================\\n")
 
-    print(">>> All MCP MicroPython Tests Completed <<<")
+    print(">>> All MCP MicroPython Tests Completed <<<", file=sys.stderr)
 
 
 if __name__ == "__main__":
+    all_passed = False
     try:
         uasyncio.run(main_test_suite())
+        all_passed = True  # If main_test_suite completes without exception
     except KeyboardInterrupt:
-        print("Test suite interrupted.")
+        print("Test suite interrupted by user.", file=sys.stderr)
+        sys.exit(130)  # Standard exit code for Ctrl+C
     except Exception as e:
-        print(f"An error occurred during the test suite: {e}")
-        # Optionally re-raise or exit with error code for CI environments
-        # raise e
+        print(f"!!! A TEST OR THE TEST SUITE FAILED !!!", file=sys.stderr)
+        print(f"Error details: {type(e).__name__}: {e}", file=sys.stderr)
+        # If MicroPython has traceback module and it's useful:
+        # import traceback
+        # traceback.print_exc(file=sys.stderr)
+        sys.exit(1)  # Exit with error code 1 on any test failure or error
+
+    if all_passed:
+        print("---------------------------------------", file=sys.stderr)
+        print(">>> ALL TESTS PASSED SUCCESSFULLY <<<", file=sys.stderr)
+        print("---------------------------------------", file=sys.stderr)
+        sys.exit(0)  # Explicitly exit with 0 on success
+    else:
+        # This case should ideally not be reached if exceptions are handled above,
+        # but as a fallback.
+        print(
+            "!!! SOME TESTS MAY HAVE FAILED (runner did not complete successfully) !!!",
+            file=sys.stderr,
+        )
+        sys.exit(1)

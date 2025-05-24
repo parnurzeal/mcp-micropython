@@ -7,21 +7,24 @@ import ujson
 if "." not in sys.path:
     sys.path.insert(0, ".")
 
-from mcp.stdio_server import process_mcp_message
-from tests.common_test_utils import setup_common_prompt_registry
+from mcp.server_core import ServerCore  # Import ServerCore
+from tests.common_test_utils import (
+    setup_test_registry,  # For dummy tool_registry
+    setup_common_resource_registry,  # For dummy resource_registry
+    setup_common_prompt_registry,
+)
 
-# --- Prompt Handler Tests (via process_mcp_message) ---
+# --- Prompt Handler Tests (now using ServerCore.process_message_dict) ---
 
 
 async def test_process_mcp_prompts_list():
+    tool_reg = setup_test_registry()
+    res_reg = setup_common_resource_registry()
     prompt_reg = setup_common_prompt_registry()
-    req = {
-        "jsonrpc": "2.0",
-        "method": "prompts/list",
-        "id": "p-list-1",
-    }  # Define req here
-    # process_mcp_message expects (message, tool_registry, resource_registry, prompt_registry)
-    resp = await process_mcp_message(req, None, None, prompt_reg)
+    server_core = ServerCore(tool_reg, res_reg, prompt_reg)  # Instantiate ServerCore
+
+    req = {"jsonrpc": "2.0", "method": "prompts/list", "id": "p-list-1"}
+    resp = await server_core.process_message_dict(req)  # Call method on instance
 
     assert resp["id"] == "p-list-1"
     assert "result" in resp
@@ -37,7 +40,11 @@ async def test_process_mcp_prompts_list():
 
 
 async def test_process_mcp_prompts_get_success():
+    tool_reg = setup_test_registry()
+    res_reg = setup_common_resource_registry()
     prompt_reg = setup_common_prompt_registry()
+    server_core = ServerCore(tool_reg, res_reg, prompt_reg)
+
     req = {
         "jsonrpc": "2.0",
         "method": "prompts/get",
@@ -47,7 +54,7 @@ async def test_process_mcp_prompts_get_success():
         },
         "id": "p-get-1",
     }
-    resp = await process_mcp_message(req, None, None, prompt_reg)
+    resp = await server_core.process_message_dict(req)
 
     assert resp["id"] == "p-get-1"
     assert "result" in resp
@@ -62,14 +69,18 @@ async def test_process_mcp_prompts_get_success():
 
 
 async def test_process_mcp_prompts_get_default_topic():
+    tool_reg = setup_test_registry()
+    res_reg = setup_common_resource_registry()
     prompt_reg = setup_common_prompt_registry()
+    server_core = ServerCore(tool_reg, res_reg, prompt_reg)
+
     req = {
         "jsonrpc": "2.0",
         "method": "prompts/get",
         "params": {"name": "common_example_prompt"},
         "id": "p-get-2",
     }
-    resp = await process_mcp_message(req, None, None, prompt_reg)
+    resp = await server_core.process_message_dict(req)
 
     assert resp["id"] == "p-get-2"
     assert "result" in resp
@@ -82,14 +93,18 @@ async def test_process_mcp_prompts_get_default_topic():
 
 
 async def test_process_mcp_prompts_get_not_found_in_registry():
+    tool_reg = setup_test_registry()
+    res_reg = setup_common_resource_registry()
     prompt_reg = setup_common_prompt_registry()
+    server_core = ServerCore(tool_reg, res_reg, prompt_reg)
+
     req = {
         "jsonrpc": "2.0",
         "method": "prompts/get",
         "params": {"name": "non_existent_prompt"},
         "id": "p-get-err-1",
     }
-    resp = await process_mcp_message(req, None, None, prompt_reg)
+    resp = await server_core.process_message_dict(req)
 
     assert resp["id"] == "p-get-err-1"
     assert "error" in resp
@@ -99,14 +114,18 @@ async def test_process_mcp_prompts_get_not_found_in_registry():
 
 
 async def test_process_mcp_prompts_get_missing_name_param():
+    tool_reg = setup_test_registry()
+    res_reg = setup_common_resource_registry()
     prompt_reg = setup_common_prompt_registry()
+    server_core = ServerCore(tool_reg, res_reg, prompt_reg)
+
     req = {
         "jsonrpc": "2.0",
         "method": "prompts/get",
         "params": {},
         "id": "p-get-err-2",
     }
-    resp = await process_mcp_message(req, None, None, prompt_reg)
+    resp = await server_core.process_message_dict(req)
     assert resp["id"] == "p-get-err-2"
     assert "error" in resp
     assert resp["error"]["code"] == -32602
