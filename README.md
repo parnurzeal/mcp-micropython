@@ -210,6 +210,7 @@ The project includes a test suite in the `tests/` directory. A master script `ru
 - **`tools/call` Method:** Tool execution errors are reported within a `CallToolResult` object with `isError: true`.
 - **`resources/list` Method:** Returns resource definitions.
 - **`resources/read` Method:** Returns `ResourceContents`. Binary content is base64 encoded in the `blob` field.
+- **`resources/subscribe` & `resources/unsubscribe` Methods:** The server includes handlers for these methods which acknowledge requests as per the MCP specification (single `uri` parameter, empty `result` object on success). However, the server currently advertises `capabilities.resources.subscribe: false` because it does **not** yet implement stateful tracking of subscriptions or send `notifications/resources/updated` messages. The full subscription flow is not yet functional.
 - **`prompts/list` Method:** Returns prompt definitions.
 - **`prompts/get` Method:** Returns `GetPromptResult` (messages and optional description).
 - **Argument Validation:** Tool, resource, and prompt handlers are responsible for their own argument validation.

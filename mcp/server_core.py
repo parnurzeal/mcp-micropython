@@ -17,7 +17,10 @@ async def _handle_initialize(
             else None
         ),
         "resources": (
-            {"subscribe": False, "listChanged": False}
+            {
+                "subscribe": False,
+                "listChanged": False,
+            }  # Set to False as notifications not implemented
             if resource_registry and hasattr(resource_registry, "list_resources")
             else None
         ),
@@ -204,11 +207,71 @@ async def _handle_tools_call(req_id, params, tool_registry):
         )
 
 
+async def _handle_resources_subscribe(req_id, params, resource_registry):
+    uri_to_subscribe = params.get("uri")
+    if not uri_to_subscribe or not isinstance(uri_to_subscribe, str):
+        return types.create_error_response(
+            req_id,
+            -32602,
+            "Invalid Params",
+            "Missing or invalid 'uri' parameter (must be a string).",
+        )
+
+    if not resource_registry:
+        return types.create_error_response(
+            req_id,
+            -32000,
+            "Server Configuration Error",
+            "Resource registry not available.",
+        )
+
+    all_known_uris = [res_def["uri"] for res_def in resource_registry.list_resources()]
+
+    if uri_to_subscribe in all_known_uris:
+        # TODO: Actually store this subscription state per client/session if transport supports it.
+        # For now, this just acknowledges and logs. No resources/updated notifications are sent.
+        # server_core_instance.active_subscriptions.add(uri_to_subscribe) # If we were storing it
+        print(
+            f"ServerCore: Client 'subscribed' to resource URI: {uri_to_subscribe} (acknowledged, no notifications yet)",
+            file=sys.stderr,
+        )
+        return types.create_success_response(req_id, {})  # Empty result on success
+    else:
+        return types.create_error_response(
+            req_id,
+            -32001,  # Using a more specific error code like "Resource not found"
+            "Subscription Error",
+            f"Resource URI '{uri_to_subscribe}' not found in registry.",
+        )
+
+
+async def _handle_resources_unsubscribe(req_id, params, resource_registry):
+    uri_to_unsubscribe = params.get("uri")
+    if not uri_to_unsubscribe or not isinstance(uri_to_unsubscribe, str):
+        return types.create_error_response(
+            req_id,
+            -32602,
+            "Invalid Params",
+            "Missing or invalid 'uri' parameter (must be a string).",
+        )
+
+    # TODO: Actually remove this from stored subscription state per client/session.
+    # For now, this just acknowledges and logs.
+    # server_core_instance.active_subscriptions.discard(uri_to_unsubscribe) # If we were storing it
+    print(
+        f"ServerCore: Client 'unsubscribed' from resource URI: {uri_to_unsubscribe} (acknowledged)",
+        file=sys.stderr,
+    )
+
+    return types.create_success_response(req_id, {})  # Empty result on success
+
+
 class ServerCore:
     def __init__(self, tool_registry, resource_registry, prompt_registry):
         self.tool_registry = tool_registry
         self.resource_registry = resource_registry
         self.prompt_registry = prompt_registry
+        # self.active_subscriptions = set() # TODO: Implement stateful subscription tracking if transport supports sessions/notifications
 
     async def process_message_dict(self, message_dict: dict):
         req_id = message_dict.get("id")
@@ -235,6 +298,14 @@ class ServerCore:
             return await _handle_prompts_list(req_id, params, self.prompt_registry)
         elif method == "prompts/get":
             return await _handle_prompts_get(req_id, params, self.prompt_registry)
+        elif method == "resources/subscribe":
+            return await _handle_resources_subscribe(
+                req_id, params, self.resource_registry
+            )
+        elif method == "resources/unsubscribe":
+            return await _handle_resources_unsubscribe(
+                req_id, params, self.resource_registry
+            )
         else:
             return types.create_error_response(
                 req_id,

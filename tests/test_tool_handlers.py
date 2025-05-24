@@ -24,24 +24,30 @@ async def test_process_mcp_initialize():
     server_core = ServerCore(tool_reg, res_reg, prompt_reg)  # Instantiate ServerCore
 
     req = {"jsonrpc": "2.0", "method": "initialize", "id": "init-1"}
-    resp = await server_core.process_message_dict(req)  # Call method on instance
+    resp = await server_core.process_message_dict(req)
 
-    assert resp["id"] == "init-1"
-    assert "result" in resp
-    assert "serverInfo" in resp["result"]
-    assert resp["result"]["serverInfo"]["name"] == "MicroPython MCP Server"
-    assert resp["result"]["serverInfo"]["version"] == "0.1.0"
-    assert "capabilities" in resp["result"]
-    assert "tools" in resp["result"]["capabilities"]
-    assert resp["result"]["capabilities"]["tools"] == {"listChanged": False}
-    assert "resources" in resp["result"]["capabilities"]
-    assert resp["result"]["capabilities"]["resources"] == {
-        "subscribe": False,
+    assert resp["id"] == "init-1", "Response ID mismatch"
+    assert "result" in resp, "Response missing 'result' field"
+    result = resp["result"]
+    assert "serverInfo" in result, "Result missing 'serverInfo'"
+    assert (
+        result["serverInfo"]["name"] == "MicroPython MCP Server"
+    ), "serverInfo.name mismatch"
+    assert result["serverInfo"]["version"] == "0.1.0", "serverInfo.version mismatch"
+    assert "capabilities" in result, "Result missing 'capabilities'"
+    capabilities = result["capabilities"]
+    assert "tools" in capabilities, "Capabilities missing 'tools'"
+    assert capabilities["tools"] == {"listChanged": False}, "Tools capability mismatch"
+    assert "resources" in capabilities, "Capabilities missing 'resources'"
+    assert capabilities["resources"] == {
+        "subscribe": False,  # Changed to False
         "listChanged": False,
-    }
-    assert "prompts" in resp["result"]["capabilities"]
-    assert resp["result"]["capabilities"]["prompts"] == {"listChanged": False}
-    assert resp["result"]["protocolVersion"] == "2025-03-26"
+    }, "Resources capability mismatch"
+    assert "prompts" in capabilities, "Capabilities missing 'prompts'"
+    assert capabilities["prompts"] == {
+        "listChanged": False
+    }, "Prompts capability mismatch"
+    assert result["protocolVersion"] == "2025-03-26", "protocolVersion mismatch"
     print("test_process_mcp_initialize PASSED")
 
 
