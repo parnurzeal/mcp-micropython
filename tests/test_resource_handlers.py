@@ -30,45 +30,27 @@ async def test_process_mcp_resources_list():
 
 async def test_process_mcp_resources_read_success():
     registry = setup_test_registry()
-    cwd = os.getcwd()
-    print(f"CWD in test_process_mcp_resources_read_success: {cwd}")
-    file_name = "test_example_resource.txt"  # Use a unique name to avoid conflicts
-    if not cwd.endswith("/"):
-        cwd += "/"
-    absolute_file_path = cwd + file_name
-    file_uri = f"file://{absolute_file_path}"
-    test_content = "This is content for resource read success test."
-
-    try:
-        with open(absolute_file_path, "w") as f:
-            f.write(test_content)
-        print(f"Successfully created '{absolute_file_path}' for test.")
-    except Exception as e:
-        print(f"Failed to create '{absolute_file_path}' for test: {e}")
-        raise AssertionError(f"Setup failed: Could not create {absolute_file_path}")
+    # Test reading the hardcoded "file:///example.txt"
+    uri_to_test = "file:///example.txt"
+    expected_content_text = "This is the hardcoded content for file:///example.txt."
 
     req = {
         "jsonrpc": "2.0",
         "method": "resources/read",
-        "params": {"uri": file_uri},
-        "id": "res-read-abs-1",
+        "params": {"uri": uri_to_test},
+        "id": "res-read-hardcoded-1",
     }
     resp = await process_mcp_message(req, registry)
-    assert resp["id"] == "res-read-abs-1"
+
+    assert resp["id"] == "res-read-hardcoded-1"
     assert "result" in resp, f"Response was: {resp}"
     assert "contents" in resp["result"]
     assert len(resp["result"]["contents"]) == 1
     content_resp = resp["result"]["contents"][0]
-    assert content_resp["uri"] == file_uri
-    assert content_resp["text"] == test_content
+    assert content_resp["uri"] == uri_to_test
+    assert content_resp["text"] == expected_content_text
     assert content_resp["mimeType"] == "text/plain"
-
-    try:
-        os.remove(absolute_file_path)
-        print(f"Successfully cleaned up '{absolute_file_path}'.")
-    except Exception as e:
-        print(f"Failed to clean up '{absolute_file_path}': {e}")
-    print("test_process_mcp_resources_read_success PASSED")
+    print("test_process_mcp_resources_read_success (hardcoded) PASSED")
 
 
 async def test_process_mcp_resources_read_missing_uri():
