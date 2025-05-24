@@ -1,14 +1,15 @@
 # MicroPython Model Context Protocol (MCP) Server SDK
 
-This project provides a lightweight SDK for building Model Context Protocol (MCP) servers in a MicroPython environment. It allows developers to expose custom functionalities (tools) that can be discovered and called by MCP clients, such as AI models or other applications.
+This project provides a lightweight SDK for building Model Context Protocol (MCP) servers in a MicroPython environment. It allows developers to expose custom functionalities (tools), share data (resources), and define prompt templates that can be discovered and utilized by MCP clients, such as AI models or other applications.
 
-The implementation focuses on the core MCP methods for tool handling (`initialize`, `tools/list`, `tools/call`) and uses a `stdio` (standard input/output) transport layer.
+The implementation focuses on core MCP methods for handling tools (`initialize`, `tools/list`, `tools/call`), resources (`resources/list`, `resources/read`), and prompts (`prompts/list`, `prompts/get`), using a `stdio` (standard input/output) transport layer.
 
 ## Prerequisites
 
 - A MicroPython environment (e.g., on a microcontroller like ESP32, Raspberry Pi Pico, or the Unix port of MicroPython).
 - The `uasyncio` library for asynchronous operations.
 - The `ujson` library for JSON parsing and serialization.
+- The `ubinascii` library for base64 encoding (used for binary resources).
 
 These libraries are typically built into standard MicroPython firmware.
 
@@ -18,177 +19,199 @@ These libraries are typically built into standard MicroPython firmware.
 .
 ├── mcp/                    # Core MCP server SDK files
 │   ├── __init__.py
-│   ├── registry.py         # ToolRegistry class for managing tools
+│   ├── registry.py         # ToolRegistry, ResourceRegistry, PromptRegistry classes
 │   ├── stdio_server.py     # Main stdio server logic and MCP method handlers
 │   └── types.py            # JSON-RPC response helpers
 ├── tests/                  # Unit tests
-│   └── test_mcp_server.py  # Tests for registry and server logic
+│   ├── common_test_utils.py
+│   ├── test_tool_registry.py
+│   ├── test_tool_handlers.py
+│   ├── test_resource_handlers.py
+│   ├── test_prompt_handlers.py
+│   └── test_stdio_transport.py
 ├── main.py                 # Example application: defines and runs a server
+├── run_all_tests.py        # Script to execute all unit tests
 └── README.md               # This file
 ```
 
 ## Developer Guide
 
-This guide explains how to create your own MCP server with custom tools using this SDK. The primary file you'll modify or use as a template is `main.py`.
+This guide explains how to create your own MCP server with custom tools, resources, and prompts using this SDK. The primary file you'll modify or use as a template is `main.py`.
 
 ### Important Note on Output Streams
 
-**Crucial for MCP Communication:** When developing your MicroPython MCP server, it is essential that all `print()` statements used for logging, debugging, or any other informational output are directed to `sys.stderr`. The standard output stream (`sys.stdout`) is exclusively used for the JSON-RPC 2.0 messages that form the communication channel with the MCP client.
+**Crucial for MCP Communication:** All `print()` statements used for logging or debugging must be directed to `sys.stderr`. The standard output stream (`sys.stdout`) is exclusively used for JSON-RPC 2.0 messages.
+Example: `import sys; print("Debug message", file=sys.stderr)`
 
-Any extraneous output (e.g., from `print("debug message")`) sent to `sys.stdout` will corrupt the JSON-RPC message stream, leading to parsing errors on the client side and a breakdown in communication.
+### 1. Define Handlers
 
-**How to do it:**
+Handlers are asynchronous Python functions that implement the logic for your tools, resources, and prompts.
 
-1.  Import the `sys` module: `import sys`
-2.  Use the `file=sys.stderr` argument in your print statements: `print("Your debug message", file=sys.stderr)`
+#### Tool Handlers
 
-This practice ensures that your server's diagnostic messages do not interfere with the protocol. The `mcp/stdio_server.py` and example `main.py` already follow this convention for their internal logging.
-
-### 1. Define Tool Handler Functions
-
-Tool handlers are asynchronous Python functions that implement the logic for your tools.
-
-- Each handler function should be defined with `async def`.
-- Parameters passed from the MCP client (in the `arguments` field of a `tools/call` request) will be passed to your handler function as keyword arguments if `arguments` is a JSON object, or as positional arguments if `arguments` is a JSON array and `param_names` were specified during registration.
-- If a tool takes no arguments, define the handler with no parameters (e.g., `async def my_tool():`).
-- The function should return a JSON-serializable value, which will be the `result` of the `tools/call` operation.
-- If an error occurs within the handler, it can raise an exception. This will be caught and translated into a JSON-RPC error response.
+- Define with `async def`.
+- Parameters from `tools/call` requests are passed as keyword or positional arguments.
+- Return a JSON-serializable value.
+- Raise exceptions for errors.
 
 **Example Tool Handlers (from `main.py`):**
 
 ```python
-# In your main application file (e.g., main.py)
-
 async def example_echo_tool(message: str):
-    """Echoes back the input message."""
     return f"Echo: {message}"
 
 async def example_add_tool(a, b):
-    """Adds two numbers."""
-    try:
-        num_a = float(a)
-        num_b = float(b)
-        return num_a + num_b
-    except ValueError:
-        raise ValueError("Invalid number input for 'add' tool.")
-
-async def example_info_tool():
-    """Returns a static piece of information."""
-    return "This is a MicroPython MCP server, version 0.1.0."
+    return float(a) + float(b)
 ```
 
-### 2. Create and Populate a `ToolRegistry`
+#### Resource Read Handlers
 
-The `ToolRegistry` (from `mcp.registry`) is used to manage your tool definitions and their handlers.
+- Define with `async def your_resource_read_handler(uri: str):`.
+- The `uri` argument is the URI of the resource being requested.
+- Should return the content of the resource, either as a `str` (for text-based resources) or `bytes` (for binary resources).
+- Raise `ResourceError` (from `mcp.registry`) or other exceptions for errors.
 
-- Import `ToolRegistry`: `from mcp.registry import ToolRegistry`
-- Create an instance: `registry = ToolRegistry()`
-- Register each tool using `registry.register_tool()`:
-  - `name` (str): The unique name of the tool (e.g., "echo", "get_weather").
-  - `description` (str): A human-readable description of what the tool does.
-  - `input_schema` (dict or None): A dictionary describing the tool's input parameters. This dictionary represents the `properties` field of a JSON Schema object.
-    - For each parameter, provide a key (parameter name) and a value (e.g., `{"type": "string", "description": "..."}`).
-    - If the tool takes no arguments, pass `None` or an empty dictionary `{}`.
-  - `handler_func` (async function): A reference to the asynchronous function that implements this tool.
-  - `param_names` (list of str, optional): If the MCP client might send arguments as a JSON array, provide a list of parameter names in the order they appear in the array. These will be mapped to keyword arguments for your handler.
-
-**Example Registry Setup (from `main.py`):**
+**Example Resource Read Handler (from `main.py`):**
 
 ```python
-# In your main application file
+async def example_read_hardcoded_resource(uri: str):
+    if uri == "file:///example.txt":
+        return "This is the dynamically registered, hardcoded content..."
+    raise ValueError(f"Handler called with unexpected URI: {uri}")
+```
 
-from mcp.registry import ToolRegistry
-# ... (import your tool handlers) ...
+#### Prompt Get Handlers
 
+- Define with `async def your_prompt_get_handler(name: str, arguments: dict):`.
+- `name` is the name of the prompt requested.
+- `arguments` is a dictionary of arguments provided by the client.
+- Should return a dictionary matching the `GetPromptResult` schema, typically `{"messages": [...], "description": "optional resolved description"}`.
+- Raise `PromptError` (from `mcp.registry`) or other exceptions for errors.
+
+**Example Prompt Get Handler (from `main.py`):**
+
+```python
+async def example_get_prompt_handler(name: str, arguments: dict):
+    if name == "example_prompt":
+        topic = arguments.get("topic", "a default topic")
+        messages = [{"role": "user", "content": {"type": "text", "text": f"Tell me more about {topic}."}}]
+        return {"description": f"A dynamically generated prompt about {topic}", "messages": messages}
+    raise ValueError(f"Unknown prompt name: {name}")
+```
+
+### 2. Create and Populate Registries
+
+Registries manage your server's capabilities.
+
+- Import `ToolRegistry`, `ResourceRegistry`, `PromptRegistry` from `mcp.registry`.
+
+#### `ToolRegistry`
+
+- `registry.register_tool(name, description, input_schema, handler_func, param_names=None)`
+
+**Example ToolRegistry Setup (from `main.py`):**
+
+```python
 def setup_my_tools():
     registry = ToolRegistry()
-
     registry.register_tool(
         name="echo",
         description="Echoes back the provided message.",
         input_schema={"message": {"type": "string", "description": "The message to be echoed"}},
         handler_func=example_echo_tool
     )
-
-    registry.register_tool(
-        name="add",
-        description="Adds two numbers provided as 'a' and 'b'.",
-        input_schema={
-            "a": {"type": "number", "description": "The first number."},
-            "b": {"type": "number", "description": "The second number."}
-        },
-        handler_func=example_add_tool,
-        param_names=["a", "b"] # If arguments might come as a list [val_a, val_b]
-    )
-
-    registry.register_tool(
-        name="info",
-        description="Provides static information about the server.",
-        input_schema=None, # No arguments
-        handler_func=example_info_tool
-    )
+    # ... more tools ...
     return registry
+```
+
+#### `ResourceRegistry`
+
+- `registry.register_resource(uri, name, read_handler, description=None, mime_type="text/plain")`
+
+**Example ResourceRegistry Setup (from `main.py`):**
+
+```python
+def setup_my_resources():
+    resource_registry = ResourceRegistry()
+    resource_registry.register_resource(
+        uri="file:///example.txt",
+        name="Registered Example File",
+        description="A sample resource with a hardcoded read handler.",
+        mime_type="text/plain",
+        read_handler=example_read_hardcoded_resource
+    )
+    return resource_registry
+```
+
+#### `PromptRegistry`
+
+- `registry.register_prompt(name, description, arguments_schema, get_handler)`
+  - `arguments_schema`: List of argument definition objects (e.g., `[{"name": "topic", "description": "...", "required": True}]`).
+
+**Example PromptRegistry Setup (from `main.py`):**
+
+```python
+def setup_my_prompts():
+    prompt_registry = PromptRegistry()
+    prompt_registry.register_prompt(
+        name="example_prompt",
+        description="A sample prompt that can discuss a topic.",
+        arguments_schema=[{"name": "topic", "description": "The topic for the prompt", "required": True}],
+        get_handler=example_get_prompt_handler
+    )
+    return prompt_registry
 ```
 
 ### 3. Start the MCP Server
 
-- Import the `stdio_server` function: `from mcp.stdio_server import stdio_server`
-- Import `uasyncio`.
-- In an `async def main_server_loop():` function (or similar):
-  1. Call your function to set up the `ToolRegistry` (e.g., `my_registry = setup_my_tools()`).
-  2. `await stdio_server(tool_registry=my_registry)` to start the server.
-- Use `uasyncio.run(main_server_loop())` to run the event loop.
+- Import `stdio_server` from `mcp.stdio_server`.
+- In an `async def main_server_loop():`
+  1. Create and populate all three registries.
+  2. `await stdio_server(tool_registry=my_tool_reg, resource_registry=my_res_reg, prompt_registry=my_prompt_reg)`
 
 **Example Server Start (from `main.py`):**
 
 ```python
-# In your main application file
-
-import uasyncio
-from mcp.stdio_server import stdio_server
-# ... (import ToolRegistry and setup_my_tools) ...
-
 async def main_server_loop():
-    print("Starting MCP MicroPython Stdio Server...")
-    my_registry = setup_my_tools()
-    await stdio_server(tool_registry=my_registry)
-    print("MCP MicroPython Stdio Server finished.")
+    print("Starting MCP MicroPython Stdio Server...", file=sys.stderr)
+    my_tool_registry = setup_my_tools()
+    my_resource_registry = setup_my_resources()
+    my_prompt_registry = setup_my_prompts()
+
+    await stdio_server(
+        tool_registry=my_tool_registry,
+        resource_registry=my_resource_registry,
+        prompt_registry=my_prompt_registry
+    )
+    print("MCP MicroPython Stdio Server finished.", file=sys.stderr)
 
 if __name__ == "__main__":
-    try:
-        uasyncio.run(main_server_loop())
-    except KeyboardInterrupt:
-        print("Main application interrupted by user. Exiting.")
-    # ... (other exception handling) ...
+    uasyncio.run(main_server_loop())
 ```
 
 ### 4. Running Your Server
 
-- Ensure all files (`mcp/` directory, your `main.py`) are on your MicroPython device or accessible to your MicroPython Unix port.
-- Run your main application file: `micropython main.py`
-- The server will start and wait for JSON-RPC 2.0 messages on stdin. Responses will be sent to stdout.
+- Ensure all files are on your MicroPython device or accessible to your MicroPython Unix port.
+- Run: `micropython main.py`
 
 ## Running Unit Tests
 
-The project includes a test suite in `tests/test_mcp_server.py`.
-To run the tests:
+The project includes a test suite in the `tests/` directory. A master script `run_all_tests.py` is provided to execute all tests.
 
 1. Ensure the `mcp/` directory and `tests/` directory are structured correctly.
-2. From the project root directory, run: `micropython tests/test_mcp_server.py`
+2. From the project root directory, run: `micropython run_all_tests.py`
 3. The tests will print "PASSED" for each successful test case or a traceback for failures.
 
 ## MCP Compliance Notes
 
-- **JSON-RPC 2.0:** The server aims for JSON-RPC 2.0 compliance for request/response structure and error objects. Notifications (requests without an `id`) are processed but do not elicit a response.
-- **`initialize` Method:** Responds with `serverName`, `serverVersion`, `specificationVersion` ("2025-03-26"), and basic `capabilities` for tools.
-- **`tools/list` Method:**
-  - Returns a list of tool definitions.
-  - Each tool's `inputSchema` will be `null` if it takes no arguments.
-  - If it has arguments, `inputSchema` will be a basic JSON Schema object: `{"type": "object", "properties": <your_schema_props_dict>}`.
-  - Full JSON Schema features (like `required` fields) are not automatically generated from the simplified `input_schema` provided during registration but could be manually constructed by the developer if needed for the `properties` dictionary.
-- **`tools/call` Method:**
-  - Expects `params` to contain `name` (string) and `arguments` (object, list, or null).
-  - Argument validation against the `inputSchema` is **not** automatically performed by the SDK before calling the tool handler. **Tool handler functions are responsible for their own argument validation.** This is a simplification for the MicroPython environment.
-- **Error Codes:** Standard JSON-RPC error codes are used where applicable (e.g., -32700 Parse Error, -32600 Invalid Request, -32601 Method Not Found, -32602 Invalid Params). A server-specific code (-32000) is used for tool execution errors.
+- **JSON-RPC 2.0:** Adheres to JSON-RPC 2.0 structure.
+- **`initialize` Method:** Responds with `serverInfo`, `protocolVersion` ("2025-03-26"), and `capabilities` for tools, resources, and prompts (if their respective registries are provided and populated).
+- **`tools/list` Method:** Returns tool definitions. `inputSchema` is `{"type": "object", "properties": {}}` for no-argument tools.
+- **`tools/call` Method:** Tool execution errors are reported within a `CallToolResult` object with `isError: true`.
+- **`resources/list` Method:** Returns resource definitions.
+- **`resources/read` Method:** Returns `ResourceContents`. Binary content is base64 encoded in the `blob` field.
+- **`prompts/list` Method:** Returns prompt definitions.
+- **`prompts/get` Method:** Returns `GetPromptResult` (messages and optional description).
+- **Argument Validation:** Tool, resource, and prompt handlers are responsible for their own argument validation.
 
-This SDK provides a foundational layer for building MCP-compliant servers on MicroPython, with deliberate simplifications to suit resource-constrained environments.
+This SDK provides a foundational layer for building MCP-compliant servers on MicroPython.
