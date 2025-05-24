@@ -21,14 +21,96 @@ async def handle_initialize(req_id, params, registry):
             "tools": {
                 "listChanged": False
             },  # True if server can notify client of tool changes
-            # "resources": {"subscribe": False, "listChanged": False}, # Example if resources were supported
+            "resources": {
+                "subscribe": False,
+                "listChanged": False,
+            },  # Added resource capabilities
             # "prompts": {"listChanged": False} # Example if prompts were supported
         },
     }
     return types.create_success_response(req_id, capabilities_response)
 
 
-async def handle_tools_list(req_id, params, registry):  # Renamed to handle_tools_list
+async def handle_resources_list(req_id, params, registry):
+    # For now, return a hardcoded list of resources.
+    # A real implementation would manage resources dynamically.
+    # `params` could be used for pagination (cursor), ignored for now.
+    sample_resources = [
+        {
+            "uri": "file:///example.txt",
+            "name": "Example Text File",
+            "description": "A sample text file resource.",
+            "mimeType": "text/plain",
+        }
+    ]
+    return types.create_success_response(req_id, {"resources": sample_resources})
+
+
+async def handle_resources_read(req_id, params, registry):
+    uri_to_read = params.get("uri")
+    if not uri_to_read:
+        return types.create_error_response(
+            req_id, -32602, "Invalid Params", "Missing 'uri' parameter."
+        )
+
+    if uri_to_read.startswith("file:///"):
+        file_path = uri_to_read[7:]  # Remove "file://"
+        try:
+            # This is a synchronous file read, which might block in an async context.
+            # For MicroPython, uasyncio might not have async file ops readily available
+            # like in standard Python. This is a simplification.
+            with open(file_path, "r") as f:
+                content = f.read()
+
+            resource_content = {
+                "uri": uri_to_read,
+                "mimeType": "text/plain",  # Assuming text for now
+                "text": content,
+            }
+            return types.create_success_response(
+                req_id, {"contents": [resource_content]}
+            )
+        except OSError as e:  # Catch file not found or other OS errors
+            # Check if it's specifically a "file not found" (ENOENT)
+            # Micropython's OSError can have e.args[0] as the errno
+            if hasattr(e, "args") and len(e.args) > 0 and e.args[0] == 2:  # ENOENT
+                return types.create_error_response(
+                    req_id, -32001, "Resource Not Found", f"File not found: {file_path}"
+                )
+            return types.create_error_response(
+                req_id, -32000, "Resource Error", f"Error reading file {file_path}: {e}"
+            )
+        except Exception as e:
+            return types.create_error_response(
+                req_id,
+                -32000,
+                "Resource Error",
+                f"Unexpected error reading {file_path}: {e}",
+            )
+    else:
+        return types.create_error_response(
+            req_id,
+            -32002,
+            "Unsupported URI Scheme",
+            f"URI scheme for '{uri_to_read}' not supported.",
+        )
+
+
+# Helper to check file existence, as os.path.exists might not be standard
+def _file_exists(path):
+    try:
+        # Try to open for reading, if it fails with ENOENT, file doesn't exist
+        # This is a more portable way in MicroPython than os.stat
+        with open(path, "r") as f:
+            pass
+        return True
+    except OSError as e:
+        if hasattr(e, "args") and len(e.args) > 0 and e.args[0] == 2:  # ENOENT
+            return False
+        raise  # Re-raise other OSErrors
+
+
+async def handle_tools_list(req_id, params, registry):
     # `params` could be used for filtering if supported, ignored for now.
     if not registry:
         return types.create_error_response(
@@ -99,10 +181,14 @@ async def process_mcp_message(message_dict, registry):
 
     if method == "initialize":
         return await handle_initialize(req_id, params, registry)
-    elif method == "tools/list":  # Corrected: MCP spec uses 'tools/list'
+    elif method == "tools/list":
         return await handle_tools_list(req_id, params, registry)
-    elif method == "tools/call":  # Corrected: MCP spec uses 'tools/call'
+    elif method == "tools/call":
         return await handle_tools_call(req_id, params, registry)
+    elif method == "resources/list":
+        return await handle_resources_list(req_id, params, registry)
+    elif method == "resources/read":
+        return await handle_resources_read(req_id, params, registry)
     else:
         return types.create_error_response(
             req_id,
