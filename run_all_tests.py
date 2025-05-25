@@ -1,5 +1,5 @@
 # run_all_tests.py
-import uasyncio
+import uasyncio  # Reverted to uasyncio for MicroPython environment
 import sys
 
 # Ensure the project root is in the path so 'tests' can be imported as a package.
@@ -11,8 +11,9 @@ if "." not in sys.path:
 import tests.test_tool_registry
 import tests.test_tool_handlers
 import tests.test_resource_handlers
-import tests.test_prompt_handlers  # New
+import tests.test_prompt_handlers
 import tests.test_stdio_transport
+import tests.test_wifi_server  # New import
 
 
 async def main_test_suite():
@@ -42,13 +43,17 @@ async def main_test_suite():
     await tests.test_stdio_transport.run_stdio_transport_tests()
     print("=======================================\\n")
 
+    # Run Wifi Server tests
+    await tests.test_wifi_server.run_wifi_server_tests()
+    print("=======================================\\n")
+
     print(">>> All MCP MicroPython Tests Completed <<<", file=sys.stderr)
 
 
 if __name__ == "__main__":
     all_passed = False
     try:
-        uasyncio.run(main_test_suite())
+        uasyncio.run(main_test_suite())  # Reverted to uasyncio
         all_passed = True  # If main_test_suite completes without exception
     except KeyboardInterrupt:
         print("Test suite interrupted by user.", file=sys.stderr)

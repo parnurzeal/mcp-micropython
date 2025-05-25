@@ -1,6 +1,9 @@
 import uasyncio
 import sys
+
+# Import both server types
 from mcp.stdio_server import stdio_server
+from mcp.wifi_server import wifi_mcp_server
 from mcp.registry import (
     ToolRegistry,
     ResourceRegistry,
@@ -117,19 +120,48 @@ def setup_my_prompts():
 
 
 async def main_server_loop():
-    print("Starting MCP MicroPython Stdio Server from main.py...", file=sys.stderr)
+    # --- Configuration ---
+    # Set to True to run the Wi-Fi server, False to run the Stdio server.
+    RUN_WIFI_SERVER = True
 
+    # Wi-Fi Configuration (only used if RUN_WIFI_SERVER is True)
+    # IMPORTANT: Replace with your actual Wi-Fi credentials if using Wi-Fi server
+    WIFI_SSID = "🌞AsaHome🏠"
+    WIFI_PASSWORD = "happywifehappylife"
+    MCP_SERVER_PORT = 8080  # Default port for Wi-Fi server, can be changed
+
+    # Setup registries (common for both server types)
     my_tool_registry = setup_my_tools()
     my_resource_registry = setup_my_resources()
-    my_prompt_registry = setup_my_prompts()  # Create prompt registry
+    my_prompt_registry = setup_my_prompts()
 
-    await stdio_server(
-        tool_registry=my_tool_registry,
-        resource_registry=my_resource_registry,
-        prompt_registry=my_prompt_registry,  # Pass prompt registry
-    )
+    if RUN_WIFI_SERVER:
+        print("Starting MCP MicroPython Wi-Fi Server from main.py...", file=sys.stderr)
+        if WIFI_SSID == "YOUR_WIFI_SSID" or WIFI_PASSWORD == "YOUR_WIFI_PASSWORD":
+            print(
+                "ERROR: Please update WIFI_SSID and WIFI_PASSWORD in main.py to run the Wi-Fi server.",
+                file=sys.stderr,
+            )
+            return
 
-    print("MCP MicroPython Stdio Server finished in main.py.", file=sys.stderr)
+        await wifi_mcp_server(
+            tool_registry=my_tool_registry,
+            resource_registry=my_resource_registry,
+            prompt_registry=my_prompt_registry,
+            wifi_ssid=WIFI_SSID,
+            wifi_password=WIFI_PASSWORD,
+            mcp_port=MCP_SERVER_PORT,
+            # server_name and server_version can also be passed to wifi_mcp_server
+        )
+        print("MCP MicroPython Wi-Fi Server finished in main.py.", file=sys.stderr)
+    else:
+        print("Starting MCP MicroPython Stdio Server from main.py...", file=sys.stderr)
+        await stdio_server(
+            tool_registry=my_tool_registry,
+            resource_registry=my_resource_registry,
+            prompt_registry=my_prompt_registry,
+        )
+        print("MCP MicroPython Stdio Server finished in main.py.", file=sys.stderr)
 
 
 if __name__ == "__main__":
