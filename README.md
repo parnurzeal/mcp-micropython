@@ -218,64 +218,61 @@ This SDK also includes a Wi-Fi based MCP server (`mcp/wifi_server.py`) that uses
   # and copy it to your device's /lib directory.
   ```
 
-  Alternatively, download the `microdot` library (specifically the `microdot` folder from its `src` directory on GitHub: [https://github.com/miguelgrinberg/microdot/tree/main/src/microdot](https://github.com/miguelgrinberg/microdot/tree/main/src/microdot)) and copy this `microdot` folder to the `/lib` directory on your MicroPython device. For example, if you downloaded it to `~/Downloads/microdot_src/microdot`:
-
-  ```bash
-  # Example for manually downloaded microdot (after navigating to where microdot_src is)
-  mpremote cp -r microdot :lib/microdot
-  ```
+  Alternatively, download the `microdot` library (specifically the `microdot` folder from its `src` directory on GitHub: [https://github.com/miguelgrinberg/microdot/tree/main/src/microdot](https://github.com/miguelgrinberg/microdot/tree/main/src/microdot)). You would then copy this downloaded `microdot` folder to your device.
 
 ### Deploying to a Microcontroller
 
 To use this MCP SDK on a MicroPython microcontroller:
 
-1.  **Core MCP SDK (`mcp/` directory)**: Copy the entire `mcp/` directory from this project to your device.
-2.  **Microdot Library**: If using the Wi-Fi server, ensure `microdot` is installed on your device as described above.
-3.  **Your Main Application File**: This will be your script (e.g., like `main.py` or `main-pico.py` from this project) where you define tools, resources, prompts, and start the chosen server.
+1.  **Core MCP SDK (`mcp/` directory)**: This is the `mcp` folder from this project.
+2.  **Microdot Library**: If using the Wi-Fi server (`mcp/wifi_server.py`), ensure the `microdot` library is on your device. You can install it via `mip` (see above) or by manually copying it.
+3.  **Your Main Application File**: This is your primary script that initializes and runs the MCP server (e.g., `main.py` if it's configured to start the Wi-Fi server, or a script like `main-pico.py`).
 
 **Recommended Placement on Device:**
 
-- Place library code (like the `mcp` SDK and the separately installed `microdot` library) into the `/lib` directory on your device.
-- Place your main application script (e.g., `main.py`) in the root directory (`/`) of your device.
+- Copy the `mcp/` SDK directory and (if using the Wi-Fi server and not installing `microdot` via `mip`) the `microdot/` library directory directly to the root (`/`) of your MicroPython device's filesystem.
+- Place your main application script (e.g., `main.py`) also in the root directory (`/`).
 
-**Recommended Placement:**
+MicroPython's `sys.path` includes the root directory, so modules placed here will be importable. While using a `/lib` folder is also common, placing directly in root can be simpler for smaller projects or direct deployments.
 
-- Place library code (like the `mcp` SDK and `microdot`) into the `/lib` directory on your device.
-- Place your main application script (e.g., `main.py`) in the root directory (`/`) of your device.
+**Example File Transfer using `mpremote`:**
 
-**Example File Transfer Methods:**
+`mpremote` is a versatile command-line tool for interacting with MicroPython devices.
 
-You can use tools like `mpremote` (part of MicroPython) or Thonny IDE.
+```bash
+# 0. List connected devices to find your port (optional, if not using default)
+# mpremote connect list
 
-- **Using `mpremote` (Recommended for `/lib`):**
-  Assuming your device is connected and `mpremote` is installed:
+# 1. Copy the mcp SDK (the 'mcp' folder from this project) to /mcp on the device
+#    Run this command from the root of this SDK project directory.
+mpremote fs cp -r mcp :mcp
 
-  ```bash
-  # List connected devices to find your port (e.g., /dev/ttyACM0, /dev/ttyUSB0, COM3)
-  # mpremote connect list
+# 2. Install Microdot (if using the Wi-Fi server and not using mip):
+#    a. Download the Microdot library. Extract it. You should have a 'microdot' folder
+#       (this folder is inside Microdot's 'src' directory on GitHub).
+#    b. Navigate your computer's terminal to the directory *containing* your downloaded 'microdot' folder.
+#    c. Copy the 'microdot' folder to the root of the device:
+mpremote fs cp -r microdot :microdot
+#       (This creates /microdot on the device and copies contents into it.)
 
-  # Create /lib directory on the device if it doesn't exist
-  # Replace <device_shortcut> with your device, e.g., mpremote connect /dev/ttyACM0 mkdir /lib
-  # Or, if you have a default connection: mpremote mkdir /lib
-  mpremote mkdir /lib
+# 3. Copy your main application script to the device's root.
+#    If your script that starts the wifi_mcp_server is named, for example, 'my_wifi_app.py':
+mpremote cp my_wifi_app.py :main.py
+#    (Renaming to main.py makes it run on boot for many boards. Or use its original name.)
+```
 
-  # Copy the mcp SDK to /lib/mcp on the device
-  mpremote cp -r mcp :lib/mcp
+(The `:` in `mpremote ... :<path>` indicates the remote device path. Adjust device connection specifics if needed, e.g., `mpremote connect /dev/ttyUSB0 <command>`)
 
-  # Ensure Microdot is in /lib/microdot (either via mip or manual copy as shown above)
-
-  # Copy your main application file (e.g., main-pico.py) to the device's root,
-  # naming it main.py if you want it to run automatically on boot.
-  mpremote cp main-pico.py :main.py
-  ```
-
-  (The `:` in `mpremote cp` commands indicates the remote device path. Adjust device connection specifics as needed.)
-
-- **Using Thonny IDE:** You can use Thonny's file browser ("This computer" and "MicroPython device" panes) to navigate and transfer the `mcp` folder to your MicroPython device (typically into `/lib`). Ensure `microdot` is also installed, usually into `/lib` as well.
+- **Using Thonny IDE:** You can use Thonny's file browser to upload the `mcp` folder (from this project) and the `microdot` folder (which you would have downloaded separately) directly to the root of your MicroPython device's filesystem. Then upload your main application script to the root.
 
 ### Example: Running the Wi-Fi Server
 
-Refer to `main-pico.py` for an example of how to set up and run the `wifi_mcp_server`. You'll need to provide your Wi-Fi SSID and password.
+Your main application script (e.g., `main.py` or `main-pico.py` if adapted) will need to:
+
+1. Import `wifi_mcp_server` from `mcp.wifi_server`.
+2. Import and set up your tool, resource, and prompt registries.
+3. Call `uasyncio.run(wifi_mcp_server(...))` with your Wi-Fi credentials and registries.
+   Refer to the example structure in `main-pico.py` (though it might need slight adaptation based on your final setup). You'll need to provide your Wi-Fi SSID and password.
 
 ## Running Unit Tests
 
