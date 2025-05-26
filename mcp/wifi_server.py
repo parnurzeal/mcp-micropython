@@ -33,7 +33,8 @@ async def wifi_mcp_server(
 ):
     if Microdot is None or Response is None:
         print(
-            "Microdot library not loaded. Cannot start Wi-Fi server.", file=sys.stderr
+            "Microdot library not loaded correctly. Cannot start Wi-Fi server.",
+            file=sys.stderr,
         )
         return
 
@@ -53,7 +54,7 @@ async def wifi_mcp_server(
 
     max_wait = WIFI_CONNECT_TIMEOUT_S
     while max_wait > 0:
-        if wlan.status() < 0 or wlan.status() >= 3:
+        if wlan.status() < 0 or wlan.status() >= 3:  # STAT_GOT_IP is 3
             break
         max_wait -= 1
         print("Waiting for Wi-Fi connection...", file=sys.stderr)
@@ -108,7 +109,6 @@ def create_mcp_microdot_app(server_core_instance: ServerCore):
             if client_ip_tuple
             else "Unknown Client"
         )
-
         print(
             f"--- MCP Wi-Fi: Request received from {client_ip} to {request.path} ---",
             file=sys.stderr,
@@ -117,26 +117,11 @@ def create_mcp_microdot_app(server_core_instance: ServerCore):
             f"MCP Wi-Fi: Method: {request.method}, Content-Type: {request.content_type}",
             file=sys.stderr,
         )
-        # print(f"MCP Wi-Fi: Headers: {request.headers}", file=sys.stderr) # Can be verbose
-
-        raw_body_sample = "Not read or empty"
-        try:
-            # request.json does the parsing. If it's None, body might be empty or not valid JSON.
-            # request.body would give raw bytes but might be consumed by .json
-            # For robust logging, one might try to get raw bytes first if direct access is safe before .json
-            # but Microdot's TestClient populates .json from a dict directly.
-            # For now, we rely on .json and log if it's None.
-            pass  # Raw body logging can be tricky with streams / auto-parsing
-        except Exception as e_body_log:
-            print(
-                f"MCP Wi-Fi: Minor error trying to log raw body: {e_body_log}",
-                file=sys.stderr,
-            )
 
         message_dict = None
         current_req_id = None
         response_data = None
-        http_status_code = 200  # Default for successful JSON-RPC or error-in-payload
+        http_status_code = 200
 
         try:
             if (
@@ -145,13 +130,12 @@ def create_mcp_microdot_app(server_core_instance: ServerCore):
             ):
                 print(f"MCP Wi-Fi: Attempting to parse JSON body...", file=sys.stderr)
                 try:
-                    message_dict = request.json  # Access potentially raising property
-                except ValueError:  # Catch ValueError from request.json property itself
-                    message_dict = None  # Treat as if it returned None
-
+                    message_dict = request.json
+                except ValueError:
+                    message_dict = None
                 if message_dict is None:
                     print(
-                        f"MCP Wi-Fi: JSON parsing failed or empty body (request.json is None or raised ValueError).",
+                        f"MCP Wi-Fi: JSON parsing failed or empty body.",
                         file=sys.stderr,
                     )
                     response_data = types.create_error_response(
@@ -174,25 +158,20 @@ def create_mcp_microdot_app(server_core_instance: ServerCore):
                     "Invalid Request",
                     "Content-Type must be application/json.",
                 )
-                http_status_code = 415  # Unsupported Media Type
+                http_status_code = 415
 
-            if http_status_code != 200:  # Error already determined (400 or 415)
+            if http_status_code != 200:
                 print(
                     f"MCP Wi-Fi: Handler returning early (HTTP Error): {response_data}, {http_status_code}",
                     file=sys.stderr,
                 )
-                # For actual Microdot server, we need to return a Response object or a tuple Microdot understands
                 return Response(response_data, status_code=http_status_code)
 
-            # If we got here, message_dict should be populated from valid JSON
             is_notification = "id" not in message_dict
             current_req_id = message_dict.get("id")
 
             if "method" not in message_dict or "jsonrpc" not in message_dict:
-                print(
-                    f"MCP Wi-Fi: Invalid JSON-RPC structure (missing method or jsonrpc).",
-                    file=sys.stderr,
-                )
+                print(f"MCP Wi-Fi: Invalid JSON-RPC structure.", file=sys.stderr)
                 if not is_notification:
                     response_data = types.create_error_response(
                         current_req_id,
@@ -200,12 +179,12 @@ def create_mcp_microdot_app(server_core_instance: ServerCore):
                         "Invalid Request",
                         "The JSON sent is not a valid Request object.",
                     )
-                else:  # Malformed notification
+                else:
                     print(
                         f"MCP Wi-Fi: Malformed notification, returning 204.",
                         file=sys.stderr,
                     )
-                    return Response(status_code=204)  # Microdot needs a Response
+                    return Response(status_code=204)
             else:
                 print(
                     f"MCP Wi-Fi: Calling ServerCore for method: {message_dict.get('method')}",
@@ -238,22 +217,19 @@ def create_mcp_microdot_app(server_core_instance: ServerCore):
                             "ServerCore returned no response.",
                         )
 
-            # At this point, response_data should be set for non-notifications (either result or error)
             if response_data:
                 print(
                     f"MCP Wi-Fi: Handler returning (Success/RPC Error in body): {response_data}",
                     file=sys.stderr,
                 )
-                return Response(
-                    response_data
-                )  # Microdot handles dict to JSON, status 200 default
-            elif is_notification:  # Should have already returned
+                return Response(response_data)
+            elif is_notification:
                 print(
-                    f"MCP Wi-Fi: Reached end for notification (should not happen if already returned). Ensuring 204.",
+                    f"MCP Wi-Fi: Reached end for notification (should not happen). Ensuring 204.",
                     file=sys.stderr,
                 )
                 return Response(status_code=204)
-            else:  # Fallback, should ideally not be reached
+            else:
                 print(
                     f"MCP Wi-Fi: Unhandled case. Sending generic internal error.",
                     file=sys.stderr,
@@ -271,12 +247,10 @@ def create_mcp_microdot_app(server_core_instance: ServerCore):
                 f"MCP Wi-Fi: Exception in handle_mcp_request: {type(e).__name__}: {e}",
                 file=sys.stderr,
             )
-            # Attempt to get traceback if possible (MicroPython specific)
             if hasattr(sys, "print_exception"):
                 sys.print_exception(e, sys.stderr)
-
             error_response_payload = types.create_error_response(
-                current_req_id,  # Might be None if error was before parsing ID
+                current_req_id,
                 -32603,
                 "Internal Server Error",
                 f"Server error: {type(e).__name__} - {str(e)}",

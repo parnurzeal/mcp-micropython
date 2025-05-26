@@ -211,6 +211,7 @@ class ManualMock:
             "_spec",
             "_children",
             "_track_calls",  # Added _track_calls here
+            "__await__",  # Allow setting __await__ directly
         ]:
             super().__setattr__(name, value)
         else:

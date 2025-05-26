@@ -328,11 +328,11 @@ Your main application script (e.g., `main_ble.py`) will need to:
 
 ## Running Unit Tests
 
-The project includes a test suite in the `tests/` directory. The `run_all_tests.py` script is designed to be executed with a `micropython` interpreter.
+The project includes a test suite in the `tests/` directory. The `run_all_tests.py` script is designed to be executed **exclusively** with a `micropython` interpreter (e.g., `micropython run_all_tests.py`).
 
 **Test Environment Notes:**
 
-- **Execution:** The `run_all_tests.py` script is intended to be run using a `micropython` interpreter (e.g., `micropython run_all_tests.py`). It uses MicroPython's native `uasyncio` (as `asyncio`).
+- **Execution:** The script uses MicroPython's native `uasyncio` (as `asyncio`). All tests run in the native MicroPython environment.
 - **Bluetooth Tests (`tests/test_bluetooth_server.py`):**
   - These tests require a MicroPython environment with functional `bluetooth` and `aioble` modules.
   - `run_all_tests.py` will automatically skip these tests if `bluetooth` or `aioble` cannot be imported, printing an informational message. This is common if the `micropython` host executable (e.g., Unix port) was not built with Bluetooth support.
@@ -340,8 +340,8 @@ The project includes a test suite in the `tests/` directory. The `run_all_tests.
 - **Wi-Fi Tests (`tests/test_wifi_server.py`):**
   - These tests also require a MicroPython environment with a functional `network` module and the `microdot` library installed.
   - `run_all_tests.py` will automatically skip these tests if `network` or `microdot` cannot be imported.
-  - The Wi-Fi connection specific tests within `test_wifi_server.py` (e.g., `test_wifi_connection_success_and_server_start_attempt`, `test_wifi_connection_failure`) will attempt real network operations. For these to pass, the MicroPython environment must have Wi-Fi hardware and the placeholder `TEST_SSID` and `TEST_PASSWORD` in the test file must be updated to valid local Wi-Fi credentials. Otherwise, these specific connection tests will likely fail or be skipped internally by the test logic if it cannot connect.
-  - The HTTP request handling parts of the Wi-Fi tests (using `TestClient`) will run against a local Microdot instance and should pass if `microdot` is installed, even if a real Wi-Fi connection isn't established.
+  - The Wi-Fi connection specific tests within `test_wifi_server.py` (e.g., `test_wifi_connection_success_and_server_start_attempt`) will attempt real network operations. For these to pass, the MicroPython environment must have Wi-Fi hardware and the placeholder `TEST_SSID` and `TEST_PASSWORD` in `tests/test_wifi_server.py` should be updated to valid local Wi-Fi credentials. Otherwise, these specific connection tests will likely fail.
+  - The HTTP request handling parts of the Wi-Fi tests (using `TestClient`) should run against a local Microdot instance and should pass if `microdot` is installed, even if a real Wi-Fi connection isn't established by the connection tests.
 
 1. Ensure the `mcp/` directory and `tests/` directory are structured correctly.
 2. From the project root directory, run: `micropython run_all_tests.py`
