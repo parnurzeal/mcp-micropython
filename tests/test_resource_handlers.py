@@ -1,7 +1,7 @@
 # tests/test_resource_handlers.py
 import sys
-import uasyncio
-import ujson
+import asyncio
+import json
 import os
 
 # Ensure the project root is in the path
@@ -293,4 +293,4 @@ async def run_resource_handler_tests():
 
 
 if __name__ == "__main__":
-    uasyncio.run(run_resource_handler_tests())
+    asyncio.run(run_resource_handler_tests())

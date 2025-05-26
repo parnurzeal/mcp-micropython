@@ -1,7 +1,7 @@
 # tests/test_stdio_transport.py
 import sys
-import uasyncio
-import ujson
+import asyncio
+import json
 
 # Ensure the project root is in the path
 if "." not in sys.path:
@@ -48,7 +48,7 @@ async def test_stdio_server_handles_notification():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
     prompt_reg = setup_common_prompt_registry()
-    notification_msg_str = ujson.dumps(
+    notification_msg_str = json.dumps(
         {"jsonrpc": "2.0", "method": "some/notification", "params": {"data": "test"}}
     )
     reader = MockStreamReader([notification_msg_str, ""])
@@ -73,7 +73,7 @@ async def test_stdio_server_sends_response_for_request():
     tool_reg = setup_test_registry()
     res_reg = setup_common_resource_registry()
     prompt_reg = setup_common_prompt_registry()
-    request_msg_str = ujson.dumps(
+    request_msg_str = json.dumps(
         {"jsonrpc": "2.0", "method": "initialize", "id": "init-req-1"}
     )
     reader = MockStreamReader([request_msg_str, ""])
@@ -90,7 +90,7 @@ async def test_stdio_server_sends_response_for_request():
     written_output = writer.get_written_str().strip()
     assert written_output != "", "Expected output for a request, but got none."
     try:
-        response_json = ujson.loads(written_output)
+        response_json = json.loads(written_output)
         assert response_json.get("id") == "init-req-1"
         assert "result" in response_json
     except ValueError:
@@ -106,4 +106,4 @@ async def run_stdio_transport_tests():
 
 
 if __name__ == "__main__":
-    uasyncio.run(run_stdio_transport_tests())
+    asyncio.run(run_stdio_transport_tests())

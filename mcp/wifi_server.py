@@ -1,7 +1,7 @@
 # mcp/wifi_server.py
 import sys
-import uasyncio
-import ujson
+import asyncio
+import json
 import network
 
 from . import types
@@ -57,7 +57,7 @@ async def wifi_mcp_server(
             break
         max_wait -= 1
         print("Waiting for Wi-Fi connection...", file=sys.stderr)
-        await uasyncio.sleep(1)
+        await asyncio.sleep(1)
 
     if wlan.status() != 3:  # network.STAT_GOT_IP
         print(f"Wi-Fi connection failed. Status: {wlan.status()}", file=sys.stderr)
@@ -79,7 +79,7 @@ async def wifi_mcp_server(
         print("MCP Wi-Fi Server interrupted. Shutting down.", file=sys.stderr)
         if hasattr(app, "shutdown") and callable(app.shutdown):
             app.shutdown()
-    except uasyncio.CancelledError:
+    except asyncio.CancelledError:
         print("MCP Wi-Fi Server task cancelled.", file=sys.stderr)
         if hasattr(app, "shutdown") and callable(app.shutdown):
             app.shutdown()
@@ -144,10 +144,14 @@ def create_mcp_microdot_app(server_core_instance: ServerCore):
                 and "application/json" in request.content_type.lower()
             ):
                 print(f"MCP Wi-Fi: Attempting to parse JSON body...", file=sys.stderr)
-                message_dict = request.json  # Microdot parses JSON here
+                try:
+                    message_dict = request.json  # Access potentially raising property
+                except ValueError:  # Catch ValueError from request.json property itself
+                    message_dict = None  # Treat as if it returned None
+
                 if message_dict is None:
                     print(
-                        f"MCP Wi-Fi: JSON parsing failed or empty body (request.json is None).",
+                        f"MCP Wi-Fi: JSON parsing failed or empty body (request.json is None or raised ValueError).",
                         file=sys.stderr,
                     )
                     response_data = types.create_error_response(

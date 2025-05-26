@@ -1,7 +1,7 @@
 # tests/test_prompt_handlers.py
 import sys
-import uasyncio
-import ujson
+import asyncio
+import json
 
 # Ensure the project root is in the path
 if "." not in sys.path:
@@ -144,4 +144,4 @@ async def run_prompt_handler_tests():
 
 
 if __name__ == "__main__":
-    uasyncio.run(run_prompt_handler_tests())
+    asyncio.run(run_prompt_handler_tests())

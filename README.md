@@ -7,11 +7,18 @@ The implementation focuses on core MCP methods for handling tools (`initialize`,
 ## Prerequisites
 
 - A MicroPython environment (e.g., on a microcontroller like ESP32, Raspberry Pi Pico, or the Unix port of MicroPython).
-- The `uasyncio` library for asynchronous operations.
-- The `ujson` library for JSON parsing and serialization.
+- An asyncio library (typically `uasyncio`, often available as `asyncio`).
+- A JSON library (typically `ujson`, available by importing `json`).
 - The `ubinascii` library for base64 encoding (used for binary resources).
 
 These libraries are typically built into standard MicroPython firmware.
+
+For Bluetooth functionality (using `mcp/bluetooth_server.py` and its tests):
+
+- The **`bluetooth` module** must be available in your MicroPython firmware/build. This is a core C module and usually cannot be installed via `mip`. If your `micropython` host executable (e.g., Unix port) reports `ImportError: no module named 'bluetooth'`, it means that specific build of MicroPython does not include Bluetooth support. You would need to use a MicroPython build that has it (e.g., firmware for a BLE-capable board like Pico W, or a Unix port compiled with Bluetooth support).
+- The **`aioble` library** is required. This library depends on the `bluetooth` module.
+  - **For IoT Devices (e.g., Pico W, ESP32):** Connect to your device and run `mpremote mip install aioble` in your computer's terminal.
+  - **For Host `micropython` (e.g., Unix port):** If `aioble` is not found after ensuring `bluetooth` is present, you may need to install it. This typically involves ensuring `aioble` is in MicroPython's search path (e.g., `~/.micropython/lib` for the Unix port, or a path in `MICROPYPATH`). If `mip` is available in your host `micropython` (it might need to be installed separately for the Unix port, e.g., `micropython -m upip install micropython-mip`), you can then try `import mip; mip.install("aioble")` from the MicroPython REPL or by running `micropython -m mip install aioble`.
 
 ## Project Structure
 
@@ -274,9 +281,67 @@ Your main application script (e.g., `main.py` or `main-pico.py` if adapted) will
 3. Call `uasyncio.run(wifi_mcp_server(...))` with your Wi-Fi credentials and registries.
    Refer to the example structure in `main-pico.py` (though it might need slight adaptation based on your final setup). You'll need to provide your Wi-Fi SSID and password.
 
+## Using the Bluetooth LE Server (with NUS)
+
+This SDK also includes a Bluetooth Low Energy (BLE) based MCP server (`mcp/bluetooth_server.py`) that uses the Nordic UART Service (NUS) for communication. This is suitable for devices with BLE capabilities (e.g., ESP32, Pico W).
+
+### Dependencies for Bluetooth LE Server
+
+- All prerequisites for the stdio server (MicroPython, `uasyncio`, `ujson`, `ubinascii`).
+- The **`ubluetooth` module**, which is a standard part of MicroPython firmware on devices that support Bluetooth. No external libraries are typically needed for basic BLE NUS functionality.
+
+### Deploying to a Microcontroller (for BLE Server)
+
+To use the Bluetooth MCP server on a MicroPython microcontroller:
+
+1.  **Core MCP SDK (`mcp/` directory)**: This is the `mcp` folder from this project.
+2.  **Your Main Application File**: This is your primary script that initializes and runs the MCP server using the Bluetooth transport (e.g., `main_ble.py`).
+
+**Recommended Placement on Device:**
+
+- Copy the `mcp/` SDK directory directly to the root (`/`) of your MicroPython device's filesystem.
+- Place your main application script (e.g., `main_ble.py`) also in the root directory (`/`).
+
+**Example File Transfer using `mpremote`:**
+
+```bash
+# 1. Copy the mcp SDK (the 'mcp' folder from this project) to /mcp on the device
+#    Run this command from the root of this SDK project directory.
+mpremote fs cp -r mcp :mcp
+
+# 2. Copy your main BLE application script to the device's root.
+#    If your script is named 'main_ble.py':
+mpremote cp main_ble.py :main.py
+#    (Renaming to main.py makes it run on boot for many boards. Or use its original name.)
+```
+
+- **Using Thonny IDE:** You can use Thonny's file browser to upload the `mcp` folder (from this project) and your `main_ble.py` script directly to the root of your MicroPython device's filesystem.
+
+### Example: Running the Bluetooth LE Server
+
+Your main application script (e.g., `main_ble.py`) will need to:
+
+1. Import `bluetooth_mcp_server` from `mcp.bluetooth_server`.
+2. Import and set up your tool, resource, and prompt registries.
+3. Call `uasyncio.run(bluetooth_mcp_server(...))` with your `ServerCore` instance and an optional device name for advertising.
+   Refer to the example structure in `main_ble.py`.
+
 ## Running Unit Tests
 
-The project includes a test suite in the `tests/` directory. A master script `run_all_tests.py` is provided to execute all tests.
+The project includes a test suite in the `tests/` directory. The `run_all_tests.py` script is designed to be executed with a `micropython` interpreter.
+
+**Test Environment Notes:**
+
+- **Execution:** The `run_all_tests.py` script is intended to be run using a `micropython` interpreter (e.g., `micropython run_all_tests.py`). It uses MicroPython's native `uasyncio` (as `asyncio`).
+- **Bluetooth Tests (`tests/test_bluetooth_server.py`):**
+  - These tests require a MicroPython environment with functional `bluetooth` and `aioble` modules.
+  - `run_all_tests.py` will automatically skip these tests if `bluetooth` or `aioble` cannot be imported, printing an informational message. This is common if the `micropython` host executable (e.g., Unix port) was not built with Bluetooth support.
+  - To run these tests, ensure your MicroPython environment (device firmware or host build) includes the `bluetooth` module, and that `aioble` is installed (e.g., via `mpremote mip install aioble` for devices, or available in the `MICROPYPATH` for host builds).
+- **Wi-Fi Tests (`tests/test_wifi_server.py`):**
+  - These tests also require a MicroPython environment with a functional `network` module and the `microdot` library installed.
+  - `run_all_tests.py` will automatically skip these tests if `network` or `microdot` cannot be imported.
+  - The Wi-Fi connection specific tests within `test_wifi_server.py` (e.g., `test_wifi_connection_success_and_server_start_attempt`, `test_wifi_connection_failure`) will attempt real network operations. For these to pass, the MicroPython environment must have Wi-Fi hardware and the placeholder `TEST_SSID` and `TEST_PASSWORD` in the test file must be updated to valid local Wi-Fi credentials. Otherwise, these specific connection tests will likely fail or be skipped internally by the test logic if it cannot connect.
+  - The HTTP request handling parts of the Wi-Fi tests (using `TestClient`) will run against a local Microdot instance and should pass if `microdot` is installed, even if a real Wi-Fi connection isn't established.
 
 1. Ensure the `mcp/` directory and `tests/` directory are structured correctly.
 2. From the project root directory, run: `micropython run_all_tests.py`

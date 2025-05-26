@@ -1,7 +1,7 @@
 import unittest
-import uasyncio
+import asyncio
 import uio
-import ujson
+import json
 import sys
 
 sys.path.insert(0, ".")
@@ -91,7 +91,7 @@ class TestStdioServer(unittest.TestCase):
         raw_chunks = []
         try:
             MockStdioWriter.CLASS_WRITTEN_CHUNKS.clear()
-            output_data_bytes, raw_chunks = uasyncio.run(_run_server_task())
+            output_data_bytes, raw_chunks = asyncio.run(_run_server_task())
         except Exception as e:
             print(f"Exception during server run: {e}", file=sys.stderr)
 
@@ -101,7 +101,7 @@ class TestStdioServer(unittest.TestCase):
         parsed_responses = []
         for line in output_lines_str:
             try:
-                parsed_responses.append(ujson.loads(line))
+                parsed_responses.append(json.loads(line))
             except ValueError:
                 # Optionally, keep this print if you want to know about parse failures
                 # print(f"DEBUG: Failed to parse JSON line: {line!r}", file=sys.stderr)
@@ -112,7 +112,7 @@ class TestStdioServer(unittest.TestCase):
         params = {"text": "hello world"}
         request_id = 1
         request_json_str = (
-            ujson.dumps(
+            json.dumps(
                 {"jsonrpc": "2.0", "method": "echo", "params": params, "id": request_id}
             )
             + "\n"
@@ -126,7 +126,7 @@ class TestStdioServer(unittest.TestCase):
         params = [10, 5]
         request_id = 2
         request_json_str = (
-            ujson.dumps(
+            json.dumps(
                 {"jsonrpc": "2.0", "method": "add", "params": params, "id": request_id}
             )
             + "\n"
@@ -140,7 +140,7 @@ class TestStdioServer(unittest.TestCase):
         params = ["a", 5]
         request_id = 3
         request_json_str = (
-            ujson.dumps(
+            json.dumps(
                 {"jsonrpc": "2.0", "method": "add", "params": params, "id": request_id}
             )
             + "\n"
@@ -156,7 +156,7 @@ class TestStdioServer(unittest.TestCase):
         request_id = 4
         method_name = "nonexistent_method"
         request_json_str = (
-            ujson.dumps(
+            json.dumps(
                 {
                     "jsonrpc": "2.0",
                     "method": method_name,

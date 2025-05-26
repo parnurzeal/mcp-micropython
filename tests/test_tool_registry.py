@@ -1,6 +1,6 @@
 # tests/test_tool_registry.py
 import sys
-import uasyncio
+import asyncio
 
 # Ensure the project root is in the path
 if "." not in sys.path:
@@ -133,4 +133,4 @@ async def run_tool_registry_tests():
 
 
 if __name__ == "__main__":
-    uasyncio.run(run_tool_registry_tests())
+    asyncio.run(run_tool_registry_tests())

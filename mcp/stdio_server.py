@@ -1,7 +1,7 @@
 # mcp/stdio_server.py
 import sys
-import uasyncio
-import ujson
+import asyncio
+import json
 from . import types
 from .server_core import ServerCore  # Import ServerCore
 
@@ -28,8 +28,8 @@ async def stdio_server(
         reader = custom_reader
         writer = custom_writer
     else:
-        reader = uasyncio.StreamReader(sys.stdin)
-        writer = uasyncio.StreamWriter(sys.stdout, {})
+        reader = asyncio.StreamReader(sys.stdin)
+        writer = asyncio.StreamWriter(sys.stdout, {})
 
     if not custom_reader:
         print(
@@ -55,7 +55,7 @@ async def stdio_server(
                 print(f"Received: {line_str}", file=sys.stderr)
 
             try:
-                message_dict = ujson.loads(line_str)
+                message_dict = json.loads(line_str)
             except ValueError:
                 response_dict = types.create_error_response(
                     None, -32700, "Parse Error", "Invalid JSON received by server."
@@ -86,7 +86,7 @@ async def stdio_server(
                         )
 
             if response_dict:
-                writer.write(ujson.dumps(response_dict).encode("utf-8") + b"\n")
+                writer.write(json.dumps(response_dict).encode("utf-8") + b"\n")
                 await writer.drain()
                 if not custom_writer:
                     print(f"Sent response: {response_dict}", file=sys.stderr)
@@ -118,7 +118,7 @@ async def stdio_server(
                         current_req_id, -32603, "Internal Server Error", str(e)
                     )
                     writer.write(
-                        ujson.dumps(error_resp_internal).encode("utf-8") + b"\n"
+                        json.dumps(error_resp_internal).encode("utf-8") + b"\n"
                     )
                     await writer.drain()
                 except Exception as e_inner:

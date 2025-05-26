@@ -1,4 +1,4 @@
-import uasyncio
+import asyncio
 import sys
 
 # Import both server types
@@ -166,7 +166,7 @@ async def main_server_loop():
 
 if __name__ == "__main__":
     try:
-        uasyncio.run(main_server_loop())
+        asyncio.run(main_server_loop())
     except KeyboardInterrupt:
         print("Main application interrupted by user. Exiting.", file=sys.stderr)
     except Exception as e:

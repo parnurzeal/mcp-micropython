@@ -1,19 +1,73 @@
 # run_all_tests.py
-import uasyncio  # Reverted to uasyncio for MicroPython environment
 import sys
 
 # Ensure the project root is in the path so 'tests' can be imported as a package.
 if "." not in sys.path:
     sys.path.insert(0, ".")
 
-# sys.path should have "." from the initial lines, which is the project root.
+# This script is intended to be run ONLY with MicroPython.
+# Use native uasyncio.
+import uasyncio as asyncio
+
+print("Using native uasyncio for tests.")
+
+# mock_bootstrap.py has been removed.
+# All tests are expected to run in a MicroPython environment.
 # Importing modules from the 'tests' package.
 import tests.test_tool_registry
 import tests.test_tool_handlers
 import tests.test_resource_handlers
 import tests.test_prompt_handlers
 import tests.test_stdio_transport
-import tests.test_wifi_server  # New import
+
+# import tests.test_wifi_server # Import will be conditional
+
+# Conditionally import and run Wi-Fi tests
+RUN_WIFI_TESTS = False
+wifi_test_module = None
+try:
+    import network
+    import microdot  # microdot is needed by test_wifi_server and the server itself
+    import tests.test_wifi_server
+
+    wifi_test_module = tests.test_wifi_server
+    RUN_WIFI_TESTS = True
+    print(
+        "MicroPython environment with 'network' and 'microdot' found, will run Wi-Fi tests."
+    )
+except ImportError as e:
+    print(f"Skipping Wi-Fi tests due to ImportError: {e}")
+    print(
+        "This is expected if the MicroPython build/port lacks network modules or if 'microdot' is not installed."
+    )
+    print(
+        "Ensure 'network' is part of your firmware and 'microdot' is installed (e.g., via mip or mpremote)."
+    )
+
+
+# Conditionally import and run bluetooth tests
+RUN_BLUETOOTH_TESTS = False
+bluetooth_test_module = None
+# We assume sys.implementation.name will be "micropython" since this script is for MicroPython.
+try:
+    import bluetooth
+    import aioble
+    import tests.test_bluetooth_server  # Import only if bluetooth and aioble are present
+
+    bluetooth_test_module = tests.test_bluetooth_server
+    RUN_BLUETOOTH_TESTS = True
+    print(
+        "MicroPython environment with 'bluetooth' and 'aioble' found, will run Bluetooth tests."
+    )
+except ImportError as e:
+    print(f"Skipping Bluetooth tests due to ImportError: {e}")
+    print(
+        "This is expected if the MicroPython build/port lacks necessary Bluetooth modules."
+    )
+    print(
+        "Ensure 'bluetooth' is part of your firmware and 'aioble' is installed (e.g., via mip or mpremote)."
+    )
+# Removed the 'else' block for non-MicroPython interpreters, as this script is now uPy-only.
 
 
 async def main_test_suite():
@@ -44,8 +98,20 @@ async def main_test_suite():
     print("=======================================\\n")
 
     # Run Wifi Server tests
-    await tests.test_wifi_server.run_wifi_server_tests()
-    print("=======================================\\n")
+    if RUN_WIFI_TESTS and wifi_test_module:
+        await wifi_test_module.run_wifi_server_tests()
+        print("=======================================\\n")
+    else:
+        print("--- Wi-Fi Server Tests SKIPPED ---")
+        print("=======================================\\n")
+
+    # Run Bluetooth Server tests
+    if RUN_BLUETOOTH_TESTS and bluetooth_test_module:
+        await bluetooth_test_module.run_bluetooth_server_tests()
+        print("=======================================\\n")
+    else:
+        print("--- Bluetooth Server Tests SKIPPED ---")
+        print("=======================================\\n")
 
     print(">>> All MCP MicroPython Tests Completed <<<", file=sys.stderr)
 
@@ -53,7 +119,7 @@ async def main_test_suite():
 if __name__ == "__main__":
     all_passed = False
     try:
-        uasyncio.run(main_test_suite())  # Reverted to uasyncio
+        asyncio.run(main_test_suite())  # Reverted to uasyncio
         all_passed = True  # If main_test_suite completes without exception
     except KeyboardInterrupt:
         print("Test suite interrupted by user.", file=sys.stderr)
