@@ -1,5 +1,7 @@
 import asyncio
 import sys
+import servo
+import dc
 
 # Import both server types
 from mcp.stdio_server import stdio_server
@@ -9,7 +11,6 @@ from mcp.registry import (
     ResourceRegistry,
     PromptRegistry,
 )  # Import PromptRegistry
-
 
 # --- Tool Handler Examples ---
 async def example_echo_tool(message: str):
@@ -26,9 +27,8 @@ async def example_add_tool(a, b):
 async def example_info_tool():
     return "This is a MicroPython MCP server, version 0.1.0."
 
-
 # --- Registry Setup ---
-def setup_my_tools():
+def setup_my_tools(servo_motors: servo.Servo):
     registry = ToolRegistry()
     registry.register_tool(
         name="echo",
@@ -53,6 +53,35 @@ def setup_my_tools():
         input_schema={},
         handler_func=example_info_tool,
     )
+    registry.register_tool(
+        name="turn_left",
+        description="turn the servo motor to left by some degrees",
+        input_schema={
+            "angle": {"type":"number",  "description": "degrees of the angle to turn"}
+        },
+        handler_func=servo_motors.turn_left
+    )
+    registry.register_tool(
+        name="turn_right",
+        description="turn the servo motor to right by some degrees",
+        input_schema={
+            "angle": {"type":"number",  "description": "degrees of the angle to turn"}
+        },
+        handler_func=servo_motors.turn_right
+    )
+    registry.register_tool(
+        name="look_upward",
+        description="Move the head of the robot upward",
+        input_schema={},
+        handler_func=servo_motors.look_upward
+    )
+    registry.register_tool(
+        name="look_downward",
+        description="Move the head of the robot downward",
+        input_schema={},
+        handler_func=servo_motors.look_downward
+    )
+    
     return registry
 
 
@@ -120,18 +149,21 @@ def setup_my_prompts():
 
 
 async def main_server_loop():
+    servo_motors = servo.Servo()
+
+
     # --- Configuration ---
     # Set to True to run the Wi-Fi server, False to run the Stdio server.
     RUN_WIFI_SERVER = True
 
     # Wi-Fi Configuration (only used if RUN_WIFI_SERVER is True)
     # IMPORTANT: Replace with your actual Wi-Fi credentials if using Wi-Fi server
-    WIFI_SSID = "🌞AsaHome🏠"
-    WIFI_PASSWORD = "happywifehappylife"
+    WIFI_SSID = "Pixel_7726"
+    WIFI_PASSWORD = "Aqianqian789"
     MCP_SERVER_PORT = 8080  # Default port for Wi-Fi server, can be changed
 
     # Setup registries (common for both server types)
-    my_tool_registry = setup_my_tools()
+    my_tool_registry = setup_my_tools(servo_motors)
     my_resource_registry = setup_my_resources()
     my_prompt_registry = setup_my_prompts()
 
@@ -162,7 +194,6 @@ async def main_server_loop():
             prompt_registry=my_prompt_registry,
         )
         print("MCP MicroPython Stdio Server finished in main.py.", file=sys.stderr)
-
 
 if __name__ == "__main__":
     try:
