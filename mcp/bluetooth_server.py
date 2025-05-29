@@ -22,6 +22,7 @@ _MCP_RX_CHAR_UUID = bluetooth.UUID(
 
 _ADV_APPEARANCE_GENERIC_DEVICE = const(0)  # Or a more specific one if desired
 _ADV_INTERVAL_MS = 250_000
+_MAX_BLUETOOTH_PACKET_BYTES = 20
 
 # Global service and characteristics
 mcp_service = aioble.Service(_MCP_SERVICE_UUID)
@@ -103,7 +104,9 @@ async def mcp_handler_task(connection, core: ServerCore, rx_char, tx_char):
                             print(
                                 f"BluetoothMCP: Sending response on TX_CHAR (0x2A6E): {response_bytes_to_send[:100]}"
                             )
-                            tx_char.notify(connection, response_bytes_to_send)
+                            for i in range(0, len(response_bytes_to_send), _MAX_BLUETOOTH_PACKET_BYTES):
+                                j = min(len(response_bytes_to_send), i + _MAX_BLUETOOTH_PACKET_BYTES)
+                                tx_char.notify(connection, response_bytes_to_send[i:j])
                             # tx_char.write(response_bytes_to_send, send_update=True) # Alternative if notify isn't enough
                             response_bytes_to_send = None
 
