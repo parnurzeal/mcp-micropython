@@ -37,10 +37,10 @@ def setup_my_tools(servo_motors: servo.Servo):
     )   
     return registry
 
-if __name__ == "__main__":
+def start_servo():
     try:
         servo_motor = servo.Servo()
-        asyncio.run(run_loop(setup_my_tools(servo_motors=servo_motor)))
+        asyncio.run(run_loop(setup_my_tools(servo_motors=servo_motor)))    
     except KeyboardInterrupt:
         print("Main application interrupted by user. Exiting.", file=sys.stderr)
     except Exception as e:

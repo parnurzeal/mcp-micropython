@@ -1,12 +1,15 @@
-from enum import Enum;
+# server type
+WIFI = 1
+STDIO = 2
 
-class ServerType(Enum):
-    WIFI = 1
-    STDIO = 2
+# robot type
+SERVO = 1
+MOVABLE = 2
 
 
 # --- Configuration ---
-SERVER_TYPE = ServerType.WIFI
+SERVER_TYPE = WIFI
+ROBOT_TYPE = MOVABLE
 
 # Wi-Fi Configuration (only used if RUN_WIFI_SERVER is True)
 # IMPORTANT: Replace with your actual Wi-Fi credentials if using Wi-Fi server

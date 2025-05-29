@@ -1,4 +1,5 @@
 import asyncio
+import dc
 import sys
 from main_server_loop import run_loop
 
@@ -25,31 +26,33 @@ async def example_info_tool():
 def setup_registry():
     registry = ToolRegistry()
     registry.register_tool(
-        name="echo",
-        description="Echoes back the provided message.",
-        input_schema={
-            "message": {"type": "string", "description": "The message to be echoed"}
-        },
-        handler_func=example_echo_tool,
-    )
-    registry.register_tool(
-        name="add",
-        description="Adds two numbers provided as 'a' and 'b'.",
-        input_schema={
-            "a": {"type": "number", "description": "The first number."},
-            "b": {"type": "number", "description": "The second number."},
-        },
-        handler_func=example_add_tool,
-    )
-    registry.register_tool(
-        name="info",
-        description="Provides static information about the server.",
+        name="move_forward",
+        description="Move the robot forward by a fixed distance.",
         input_schema={},
-        handler_func=example_info_tool,
+        handler_func=dc.forward,
+    )
+    registry.register_tool(
+        name="move_backward",
+        description="Move the robot backward by a fixed distance.",
+        input_schema={
+        },
+        handler_func=dc.backward,
+    )
+    registry.register_tool(
+        name="turn_left",
+        description="Turn the robot left by a fixed angle.",
+        input_schema={},
+        handler_func=dc.turn_left,
+    )
+    registry.register_tool(
+        name="turn_right",
+        description="Turn the robot right by a fixed angle.",
+        input_schema={},
+        handler_func=dc.turn_right,
     )
     return registry
 
-if __name__ == "__main__":
+def start_motion():
     try:
         asyncio.run(run_loop(tool_registry=setup_registry()))
     except KeyboardInterrupt:
