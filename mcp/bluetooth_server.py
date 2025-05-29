@@ -1,326 +1,242 @@
-# mcp/bluetooth_server.py
+# mcp/bluetooth_server.py (Re-integrating MCP logic)
 
 import asyncio
-import bluetooth  # Still needed for UUID
+import aioble
+import bluetooth
 import json
-import time  # For logging/debugging (though aioble might reduce need for manual time)
-import aioble  # Import aioble
-from micropython import const  # Import const
+from micropython import const
 
-from .server_core import ServerCore
+from .server_core import ServerCore  # Re-import ServerCore
+from .registry import ToolRegistry, ResourceRegistry, PromptRegistry  # For ServerCore
 
-# from .types import create_json_rpc_response # Will be needed for crafting responses
+# Service UUID (Environmental Sensing - 0x181A)
+_MCP_SERVICE_UUID = bluetooth.UUID(0x181A)
 
-# Nordic UART Service (NUS) UUIDs - These remain the same
-_NUS_SERVICE_UUID = bluetooth.UUID("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
-_NUS_RX_CHAR_UUID = bluetooth.UUID("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
-_NUS_TX_CHAR_UUID = bluetooth.UUID("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+# Characteristic UUIDs
+# Using 0x2A6E (Temperature) for TX (Server to Client for MCP responses)
+_MCP_TX_CHAR_UUID = bluetooth.UUID(0x2A6E)
+# Using a custom 128-bit UUID for RX (Client to Server for MCP commands)
+_MCP_RX_CHAR_UUID = bluetooth.UUID(
+    "DEADBEEF-0001-1000-8000-00805F9B34FB"
+)  # Custom RX UUID
 
-# Advertising interval
-_ADV_INTERVAL_US = const(250000)  # From aioble example, can be adjusted
+_ADV_APPEARANCE_GENERIC_DEVICE = const(0)  # Or a more specific one if desired
+_ADV_INTERVAL_MS = 250_000
 
+# Global service and characteristics
+mcp_service = aioble.Service(_MCP_SERVICE_UUID)
+mcp_tx_characteristic = aioble.Characteristic(
+    mcp_service, _MCP_TX_CHAR_UUID, read=True, notify=True, indicate=True
+)
+mcp_rx_characteristic = aioble.Characteristic(
+    mcp_service, _MCP_RX_CHAR_UUID, write=True, capture=True
+)
 
-class BluetoothMCPServer:
-    def __init__(self, server_core: ServerCore, device_name="PicoMCP-BLE"):
-        self._server_core = server_core
-        self._name = device_name
-
-        # Create NUS service and characteristics using aioble
-        self._nus_service = aioble.Service(_NUS_SERVICE_UUID)
-        self._tx_char = aioble.Characteristic(
-            self._nus_service, _NUS_TX_CHAR_UUID, read=True, notify=True
-        )
-        self._rx_char = aioble.Characteristic(
-            self._nus_service,
-            _NUS_RX_CHAR_UUID,
-            write=True,
-            capture=True,  # capture=True for written() to return data
-        )
-        # Register the service
-        aioble.register_services(self._nus_service)
-
-        self._connections = (
-            {}
-        )  # Store connection objects, keyed by conn_handle if needed, or just a set
-        self._rx_buffer = (
-            bytearray()
-        )  # May still be useful for accumulating partial messages
-
-        # _rx_event_placeholder and its associated debug prints are removed as it's no longer needed.
-        # Data arrival is handled by awaiting self._rx_char.written() in _handle_connection.
-
-        self._is_running = False
-        self._advertising_task = None
-        self._connection_handler_tasks = set()
-
-        print(
-            f"BluetoothMCPServer: Initialized using aioble. Advertising as '{self._name}'"
-        )
-
-    # _advertise method is removed, advertising is handled in the start/connection loop
-
-    # _irq method is removed, replaced by aioble's async event handling
-
-    async def _handle_connection(self, connection):
-        print(f"BluetoothMCPServer: Central connected: {connection.device}")
-        self._connections[connection.device] = (
-            connection  # Or use connection object directly as key/value
-        )
-        try:
-            # Handle disconnect
-            disconnected_task = asyncio.create_task(
-                connection.disconnected(timeout_ms=None)
-            )  # Wait indefinitely
-
-            while connection.is_connected():
-                # Wait for data on RX characteristic
-                try:
-                    # Using characteristic.written() which is an awaitable
-                    # The `capture=True` on RX characteristic makes `written()` return the data
-                    _, data = await self._rx_char.written(
-                        timeout_ms=1000
-                    )  # Timeout to allow checking connection state
-                    if data:
-                        self._rx_buffer.extend(data)
-                        print(f"BluetoothMCPServer: Received data: {data}")
-                        # Process buffer immediately or signal another task
-                        await self._process_buffered_data(connection)
-
-                except asyncio.TimeoutError:
-                    # No data received, loop and check connection status
-                    pass
-                except aioble.DeviceDisconnectedError:
-                    print(
-                        f"BluetoothMCPServer: Device disconnected during write wait: {connection.device}"
-                    )
-                    break  # Exit while loop
-
-                if disconnected_task.done():
-                    print(
-                        f"BluetoothMCPServer: Disconnected task done for {connection.device}"
-                    )
-                    break
-
-        except Exception as e:
-            print(
-                f"BluetoothMCPServer: Error in connection handler for {connection.device}: {e}"
-            )
-        finally:
-            print(f"BluetoothMCPServer: Cleaning up connection for {connection.device}")
-            if connection.device in self._connections:
-                del self._connections[connection.device]
-            if not disconnected_task.done():
-                disconnected_task.cancel()
-
-    async def _process_buffered_data(self, connection):
-        # This method processes data from self._rx_buffer for a specific connection
-        # and sends responses via that connection.
-        # It's called after new data is received and added to self._rx_buffer.
-
-        response_bytes = (
-            None  # Initialize to avoid UnboundLocalError if no message processed
-        )
-        while b"\n" in self._rx_buffer:
-            message_bytes, self._rx_buffer = self._rx_buffer.split(b"\n", 1)
-            message_str = message_bytes.decode("utf-8").strip()
-            if not message_str:
-                continue
-
-            print(f"BluetoothMCPServer: Processing message: {message_str}")
-            try:
-                message_dict = json.loads(message_str)
-                response_dict = await self._server_core.process_message_dict(
-                    message_dict
-                )
-                if response_dict:
-                    response_str = json.dumps(response_dict)
-                    # Ensure response also ends with a newline for the client
-                    response_bytes = (response_str + "\n").encode("utf-8")
-                else:
-                    print("BluetoothMCPServer: No response from server_core")
-                    response_bytes = None  # Explicitly set to None
-                    continue
-            except ValueError:
-                print(f"BluetoothMCPServer: Invalid JSON received: {message_str}")
-                error_response = {
-                    "jsonrpc": "2.0",
-                    "error": {"code": -32700, "message": "Parse error"},
-                    "id": None,
-                }
-                response_str = json.dumps(error_response)
-                response_bytes = (response_str + "\n").encode("utf-8")
-            except Exception as e:
-                print(f"BluetoothMCPServer: Error processing message: {e}")
-                error_response = {
-                    "jsonrpc": "2.0",
-                    "error": {"code": -32603, "message": f"Internal error: {e}"},
-                    "id": None,  # Or try to extract ID from message_dict if available
-                }
-                response_str = json.dumps(error_response)
-                response_bytes = (response_str + "\n").encode("utf-8")
-
-            if response_bytes:
-                print(
-                    f"BluetoothMCPServer: Sending response via TX characteristic: {response_bytes[:100]}"
-                )  # Log snippet
-                try:
-                    # Use aioble's characteristic notify
-                    self._tx_char.notify(connection, response_bytes)
-                except Exception as e_notify:
-                    print(f"BluetoothMCPServer: Error sending notification: {e_notify}")
-                response_bytes = None  # Reset for next message in buffer
-
-        # No sleep here, this is called synchronously within _handle_connection's loop
-
-    async def start(self):
-        self._is_running = True
-        print(f"BluetoothMCPServer: Starting. Will advertise as '{self._name}'.")
-
-        # Main advertising and connection acceptance loop
-        async def advertising_loop():
-            while self._is_running:
-                print("BluetoothMCPServer: Starting advertising...")
-                try:
-                    # Advertise and wait for a connection
-                    # services=[_NUS_SERVICE_UUID] is important for NUS clients to find the device
-                    async with await aioble.advertise(
-                        _ADV_INTERVAL_US,
-                        name=self._name,
-                        services=[_NUS_SERVICE_UUID],
-                        timeout_ms=None,  # Advertise indefinitely until connection or stop
-                    ) as connection:
-                        print(
-                            f"BluetoothMCPServer: Connection from {connection.device}"
-                        )
-                        # Create a task to handle this connection
-                        handler_task = asyncio.create_task(
-                            self._handle_connection(connection)
-                        )
-                        self._connection_handler_tasks.add(handler_task)
-                        # Optional: remove task from set when done (e.g. via callback)
-                        # For now, _handle_connection removes from self._connections dict
-                except asyncio.CancelledError:
-                    print("BluetoothMCPServer: Advertising loop cancelled.")
-                    break
-                except Exception as e:
-                    print(f"BluetoothMCPServer: Error in advertising loop: {e}")
-                    # Potentially add a small delay before retrying advertising
-                    await asyncio.sleep(
-                        5
-                    )  # Wait 5 seconds before trying to advertise again
-            print("BluetoothMCPServer: Advertising loop finished.")
-
-        self._advertising_task = asyncio.create_task(advertising_loop())
-
-        # Keep server running by waiting for the advertising task
-        # (or another mechanism if advertising_loop can exit under normal operation without stopping server)
-        if self._advertising_task:
-            try:
-                await self._advertising_task
-            except asyncio.CancelledError:
-                print(
-                    "BluetoothMCPServer: Main advertising task was cancelled during start."
-                )
-
-    async def stop(self):
-        self._is_running = False
-        print("BluetoothMCPServer: Stopping...")
-
-        if self._advertising_task:
-            print("BluetoothMCPServer: Cancelling advertising task...")
-            self._advertising_task.cancel()
-            try:
-                await self._advertising_task  # Allow cancellation to complete
-            except asyncio.CancelledError:
-                print("BluetoothMCPServer: Advertising task successfully cancelled.")
-            except Exception as e:
-                print(
-                    f"BluetoothMCPServer: Exception while awaiting cancelled advertising task: {e}"
-                )
-
-        active_connections = list(self._connections.values())
-        for conn in active_connections:
-            try:
-                print(f"BluetoothMCPServer: Disconnecting {conn.device}...")
-                await conn.disconnect(timeout_ms=1000)
-            except Exception as e:
-                print(f"BluetoothMCPServer: Error disconnecting {conn.device}: {e}")
-
-        for task in list(self._connection_handler_tasks):
-            if not task.done():
-                print(
-                    f"BluetoothMCPServer: Cancelling connection handler task {task}..."
-                )
-                task.cancel()
-                try:
-                    await task  # Allow cancellation to complete
-                except asyncio.CancelledError:
-                    print(
-                        f"BluetoothMCPServer: Connection handler task {task} successfully cancelled."
-                    )
-                except Exception as e:
-                    print(
-                        f"BluetoothMCPServer: Exception while awaiting cancelled handler task {task}: {e}"
-                    )
-        self._connection_handler_tasks.clear()
-        self._connections.clear()
-
-        # aioble.stop() will be called in the main server function's finally block.
-        print("BluetoothMCPServer: Class-level stop actions complete.")
+# Buffer for incoming data
+_rx_buffer = bytearray()
 
 
-# Main function to run the server (similar to stdio_server.py and wifi_server.py)
-async def bluetooth_mcp_server(server_core: ServerCore, device_name="PicoMCP-BLE"):
-    # It's good practice to activate BLE early if aioble doesn't do it.
-    # However, aioble.advertise and aioble.scan typically handle activation.
-    # If issues arise, uncommenting ble.active(True) here might be needed.
-    # ble = bluetooth.BLE()
-    # ble.active(True)
-
-    ble_server = BluetoothMCPServer(server_core, device_name)
+async def mcp_handler_task(connection, core: ServerCore, rx_char, tx_char):
+    global _rx_buffer
+    print(f"BluetoothMCP: mcp_handler_task started for {connection.device}")
     try:
-        await ble_server.start()
-    except KeyboardInterrupt:
-        print("BluetoothMCPServer: KeyboardInterrupt, stopping...")
+        # Write an initial status to TX char
+        tx_char.write(
+            b'{"status":"mcp_ready"}', send_update=True
+        )  # send_update to notify if client subscribed early
+
+        while connection.is_connected():
+            try:
+                _, data = await rx_char.written(timeout_ms=1000)
+                if data:
+                    _rx_buffer.extend(data)
+                    print(f"BluetoothMCP: Received on RX_CHAR (0x2A6F): {data}")
+
+                    # Process buffered data (JSON messages separated by newline)
+                    response_bytes_to_send = None
+                    while b"\n" in _rx_buffer:
+                        message_bytes, _rx_buffer = _rx_buffer.split(b"\n", 1)
+                        message_str = message_bytes.decode("utf-8").strip()
+                        if not message_str:
+                            continue
+
+                        print(f"BluetoothMCP: Processing MCP message: {message_str}")
+                        try:
+                            message_dict = json.loads(message_str)
+                            response_dict = await core.process_message_dict(
+                                message_dict
+                            )
+                            if response_dict:
+                                response_str = json.dumps(response_dict)
+                                response_bytes_to_send = (response_str + "\n").encode(
+                                    "utf-8"
+                                )
+                            else:
+                                print("BluetoothMCP: No response from core")
+                                response_bytes_to_send = None
+                                continue
+                        except ValueError:
+                            print(f"BluetoothMCP: Invalid JSON: {message_str}")
+                            error_resp = {
+                                "jsonrpc": "2.0",
+                                "error": {"code": -32700, "message": "Parse error"},
+                                "id": None,
+                            }
+                            response_bytes_to_send = (
+                                json.dumps(error_resp) + "\n"
+                            ).encode("utf-8")
+                        except Exception as e_proc:
+                            print(f"BluetoothMCP: Error processing message: {e_proc}")
+                            error_resp = {
+                                "jsonrpc": "2.0",
+                                "error": {
+                                    "code": -32603,
+                                    "message": f"Internal error: {e_proc}",
+                                },
+                                "id": None,
+                            }
+                            response_bytes_to_send = (
+                                json.dumps(error_resp) + "\n"
+                            ).encode("utf-8")
+
+                        if response_bytes_to_send:
+                            print(
+                                f"BluetoothMCP: Sending response on TX_CHAR (0x2A6E): {response_bytes_to_send[:100]}"
+                            )
+                            tx_char.notify(connection, response_bytes_to_send)
+                            # tx_char.write(response_bytes_to_send, send_update=True) # Alternative if notify isn't enough
+                            response_bytes_to_send = None
+
+            except asyncio.TimeoutError:
+                pass  # Normal if no data written by client
+            except aioble.DeviceDisconnectedError:
+                print(
+                    f"BluetoothMCP: Device disconnected during mcp_handler_task for {connection.device}"
+                )
+                break  # Exit while loop
+            except Exception as e:
+                print(f"BluetoothMCP: Error in mcp_handler_task loop: {e}")
+                await asyncio.sleep_ms(100)  # Avoid tight loop on other errors
+
+    except asyncio.CancelledError:
+        print(f"BluetoothMCP: mcp_handler_task cancelled for {connection.device}")
     except Exception as e:
-        print(f"BluetoothMCPServer: Main server loop error: {e}")
+        print(f"BluetoothMCP: Unhandled error in mcp_handler_task: {e}")
     finally:
-        print("BluetoothMCPServer: Main finally block - calling ble_server.stop()...")
-        await ble_server.stop()
-        print("BluetoothMCPServer: Main finally block - calling aioble.stop()...")
-        aioble.stop()  # Ensure aioble resources are cleaned up.
-        print("BluetoothMCPServer: Fully stopped.")
+        _rx_buffer = bytearray()  # Clear buffer for this connection
+        print(f"BluetoothMCP: mcp_handler_task finished for {connection.device}")
+
+
+async def peripheral_mcp_task(device_name_str: str, core: ServerCore):
+    print(
+        f"BluetoothMCP: peripheral_mcp_task started, advertising as {device_name_str}"
+    )
+    try:
+        aioble.register_services(mcp_service)
+        print("BluetoothMCP: MCP services registered.")
+    except Exception as e_reg:
+        print(f"BluetoothMCP: Error registering MCP services: {e_reg}")
+        return
+
+    while True:
+        print(f"BluetoothMCP: Starting advertising as '{device_name_str}'...")
+        connection = None
+        try:
+            connection = await aioble.advertise(
+                _ADV_INTERVAL_MS,
+                name=device_name_str,
+                services=[_MCP_SERVICE_UUID],  # Advertise our MCP service (0x181A)
+                appearance=_ADV_APPEARANCE_GENERIC_DEVICE,
+            )
+            print(f"BluetoothMCP: Connection from {connection.device}")
+
+            # Connection established, run the MCP handler for this connection.
+            # This will block until the handler finishes (i.e., client disconnects).
+            await mcp_handler_task(
+                connection, core, mcp_rx_characteristic, mcp_tx_characteristic
+            )
+
+            # After mcp_handler_task returns, ensure disconnection is processed.
+            print(
+                f"BluetoothMCP: mcp_handler_task completed for {connection.device}. Waiting for final disconnect confirmation."
+            )
+            await connection.disconnected(
+                timeout_ms=2000
+            )  # Wait a bit for disconnect event
+            print(f"BluetoothMCP: Device {connection.device} fully disconnected.")
+
+        except asyncio.CancelledError:
+            print("BluetoothMCP: peripheral_mcp_task cancelled.")
+            if connection and connection.is_connected():
+                await connection.disconnect()
+            break
+        except Exception as e:
+            print(f"BluetoothMCP: Error in peripheral_mcp_task: {e}")
+            if connection and connection.is_connected():
+                await connection.disconnect()  # Attempt to disconnect on error
+            await asyncio.sleep_ms(5000)
+    print("BluetoothMCP: peripheral_mcp_task finished.")
+
+
+# Main entry point called by main_ble.py
+async def bluetooth_mcp_server(server_core: ServerCore, device_name="PicoMCP-BLE"):
+    print(f"BluetoothMCP: Server starting with device name '{device_name}'")
+
+    ble = bluetooth.BLE()
+    if not ble.active():
+        ble.active(True)
+    print(f"BluetoothMCP: BLE Radio Active: {ble.active()}")
+
+    # Create the main peripheral task
+    # This task now takes server_core.
+    main_task = asyncio.create_task(peripheral_mcp_task(device_name, server_core))
+
+    try:
+        await main_task
+    except KeyboardInterrupt:
+        print("BluetoothMCP: KeyboardInterrupt received.")
+    except Exception as e:
+        print(f"BluetoothMCP: Error in main_task execution: {e}")
+    finally:
+        print("BluetoothMCP: Main server function stopping...")
+        if main_task and not main_task.done():
+            main_task.cancel()
+            try:
+                await main_task
+            except asyncio.CancelledError:
+                print("BluetoothMCP: Main task cancelled successfully.")
+        # aioble.stop() should be handled by the script calling this function (e.g. main_ble.py)
+        print("BluetoothMCP: Server stopped.")
 
 
 if __name__ == "__main__":
-    # Example usage (requires a ServerCore instance and registries)
-    # This is just for conceptual testing if run directly.
-    # A proper main.py or main_ble.py would set up ServerCore.
+    print("Starting BluetoothMCP Server directly (for testing)...")
 
-    class MockToolRegistry:
-        async def handle_tool_call(self, tool_name, params):
-            if tool_name == "echo":
-                return {"success": True, "message": params.get("message", "")}
-            return {"success": False, "error": "Tool not found"}
+    # Create a mock ServerCore for direct testing
+    mock_tool_registry = ToolRegistry()
+    mock_resource_registry = ResourceRegistry()
+    mock_prompt_registry = PromptRegistry()
+    mock_core = ServerCore(
+        mock_tool_registry, mock_resource_registry, mock_prompt_registry
+    )
 
-    class MockResourceRegistry:
-        async def handle_resource_request(self, resource_name, params):
-            return {"success": False, "error": "Resource not found"}
+    async def mock_echo_tool(message: str):
+        return f"Echo: {message}"
 
-    class MockPromptRegistry:
-        async def handle_prompt_request(self, prompt_name, params):
-            return {"success": False, "error": "Prompt not found"}
-
-    async def main():
-        print("Starting mock Bluetooth MCP Server...")
-        tool_registry = MockToolRegistry()
-        resource_registry = MockResourceRegistry()
-        prompt_registry = MockPromptRegistry()
-
-        core = ServerCore(tool_registry, resource_registry, prompt_registry)
-        await bluetooth_mcp_server(core, device_name="TestPicoBLE")
+    mock_tool_registry.register_tool(
+        name="echo",
+        description="Echoes a message",
+        input_schema={"message": {"type": "string", "description": "Message to echo"}},
+        handler_func=mock_echo_tool,
+    )
 
     try:
-        asyncio.run(main())
+        asyncio.run(bluetooth_mcp_server(mock_core, device_name="PicoMCPDirect"))
     except KeyboardInterrupt:
-        print("Main: Interrupted")
+        print("MainApp: Interrupted by user.")
+    except Exception as e:
+        print(f"MainApp: Error - {type(e).__name__}: {e}")
+    finally:
+        print("MainApp: Cleaning up aioble...")
+        aioble.stop()
+        print("MainApp: Finished.")

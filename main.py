@@ -158,8 +158,10 @@ async def main_server_loop():
 
     # Wi-Fi Configuration (only used if RUN_WIFI_SERVER is True)
     # IMPORTANT: Replace with your actual Wi-Fi credentials if using Wi-Fi server
-    WIFI_SSID = "Pixel_7726"
-    WIFI_PASSWORD = "Aqianqian789"
+    # WIFI_SSID = "🌞AsaHome🏠"
+    # WIFI_PASSWORD = "happywifehappylife"
+    WIFI_SSID = "Pixel_A"
+    WIFI_PASSWORD = "94899604"
     MCP_SERVER_PORT = 8080  # Default port for Wi-Fi server, can be changed
 
     # Setup registries (common for both server types)
