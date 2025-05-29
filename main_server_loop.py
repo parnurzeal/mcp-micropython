@@ -1,7 +1,9 @@
 import sys
 
 from config import *
+from mcp.server_core import ServerCore
 from mcp.stdio_server import stdio_server
+from mcp.bluetooth_server import bluetooth_mcp_server
 from mcp.wifi_server import wifi_mcp_server
 from mcp.registry import (
     ToolRegistry,
@@ -42,3 +44,10 @@ async def run_loop(
             prompt_registry=prompt_registry,
         )
         print("MCP MicroPython Stdio Server finished in main.py.", file=sys.stderr)
+    if SERVER_TYPE == BULETOOTH:
+        server_core = ServerCore(
+            tool_registry=tool_registry,
+            resource_registry=resource_registry,
+            prompt_registry=prompt_registry,
+        )
+        await bluetooth_mcp_server(server_core=server_core, device_name=BLUETOOTH_NAME)

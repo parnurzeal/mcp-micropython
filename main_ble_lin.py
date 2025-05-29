@@ -5,6 +5,7 @@ import asyncio
 from mcp.server_core import ServerCore
 from mcp.bluetooth_server import bluetooth_mcp_server
 from mcp.registry import ToolRegistry, ResourceRegistry, PromptRegistry
+from config import BLUETOOTH_NAME
 
 # --- Define Example Tools, Resources, Prompts ---
 
@@ -81,75 +82,23 @@ confirm_action_prompt_def = {
 }
 
 
-async def main():
+def main(
+    tool_registry: ToolRegistry,
+    resource_registry: ResourceRegistry,
+    prompt_registry: PromptRegistry,
+):
     print("Initializing Bluetooth MCP Server...")
-
-    # 1. Initialize Registries
-    tool_registry = ToolRegistry()
-    resource_registry = ResourceRegistry()
-    prompt_registry = PromptRegistry()
-
-    # 2. Register Tools, Resources, Prompts
-    tool_registry.register_tool(
-        name=echo_tool_def["name"],
-        description=echo_tool_def["description"],
-        input_schema=echo_tool_def["input_schema"][
-            "properties"
-        ],  # Pass the properties dict
-        handler_func=echo_tool,
-    )
-    print(f"Registered tool: {echo_tool_def['name']}")
-
-    resource_registry.register_resource(
-        uri=device_info_def["uri"],
-        name=device_info_def[
-            "uri"
-        ],  # Using URI as name for simplicity, or add a 'name' field to def
-        read_handler=device_info_def["handler"],
-        description=device_info_def["description"],
-        # mime_type can be added if defined in device_info_def
-    )
-    print(f"Registered resource: {device_info_def['uri']}")
-
-    # For prompt arguments_schema, it expects a list of argument definitions.
-    # Let's construct it from the input_schema's properties.
-    prompt_args_list = []
-    if "properties" in confirm_action_prompt_def["input_schema"]:
-        for arg_name, arg_def in confirm_action_prompt_def["input_schema"][
-            "properties"
-        ].items():
-            prompt_args_list.append(
-                {
-                    "name": arg_name,
-                    "description": arg_def.get("description", ""),
-                    "type": arg_def.get(
-                        "type", "string"
-                    ),  # Default to string if not specified
-                    "required": arg_name
-                    in confirm_action_prompt_def["input_schema"].get("required", []),
-                }
-            )
-
-    prompt_registry.register_prompt(
-        name=confirm_action_prompt_def["name"],
-        description=confirm_action_prompt_def["description"],
-        arguments_schema=prompt_args_list,
-        get_handler=confirm_action_prompt_def["handler"],
-    )
-    print(f"Registered prompt: {confirm_action_prompt_def['name']}")
-
-    # 3. Create ServerCore
+    # 1. Create ServerCore
     server_core = ServerCore(
         tool_registry=tool_registry,
         resource_registry=resource_registry,
         prompt_registry=prompt_registry,
     )
 
-    # 4. Start the Bluetooth MCP Server
-    device_name = "PicoMCP-NUS"
-    print(f"Starting Bluetooth server, advertising as '{device_name}'...")
+    # 2. Start the Bluetooth MCP Server
+    print(f"Starting Bluetooth server, advertising as '{BLUETOOTH_NAME}'...")
     try:
-        await bluetooth_mcp_server(server_core, device_name=device_name)
+        asyncio.run(bluetooth_mcp_server(server_core, device_name=BLUETOOTH_NAME))
     except KeyboardInterrupt:
         print("Bluetooth server stopped by user.")
     except Exception as e:
@@ -185,6 +134,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"MainApp: Error - {type(e).__name__}: {e}")
     finally:
-        print("MainApp: Cleaning up aioble...")
-        aioble.stop()
         print("MainApp: Finished.")
