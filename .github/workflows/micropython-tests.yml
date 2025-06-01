@@ -1,0 +1,32 @@
+name: MicroPython Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Set up MicroPython
+        uses: BrianPugh/install-micropython@v2.3.0
+        with:
+          reference: 'v1.22.2'
+
+      - name: Install MicroPython dependencies
+        run: |
+          micropython -m upip install microdot
+          micropython -m upip install aioble
+
+      - name: Run MicroPython Tests
+        run: micropython run_all_tests.py
